@@ -103,9 +103,6 @@ on:
     workflows: ["Your CI Workflow Name"]
     types: [completed]
 
-permissions:
-  contents: read
-
 jobs:
   fix-ci:
     if: >-

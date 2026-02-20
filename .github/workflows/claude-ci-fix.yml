@@ -151,7 +151,7 @@ jobs:
               --repo "$GH_REPO" \
               --log 2>&1 | tail -500)
           fi
-          LOGS=$(echo "$LOGS" | sed 's/##\[/\[/g')
+          LOGS="${LOGS//##\[/\[}"
           {
             echo "content<<__CLAUDE_LOGS_EOF_7f3a__"
             echo "$LOGS"

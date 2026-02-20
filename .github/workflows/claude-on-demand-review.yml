@@ -1,0 +1,139 @@
+name: Claude On-Demand Review (Reusable)
+
+# Read-only code review triggered by @claude mention in PR comments.
+# Does NOT push code — review only.
+#
+# Callers handle issue_comment / pull_request_review_comment triggers.
+# The github context is inherited from the caller, so trigger_phrase works correctly.
+
+on:
+  workflow_call:
+    inputs:
+      install_command:
+        description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
+        required: false
+        type: string
+        default: ''
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action (read-only)'
+        required: true
+        type: string
+      extra_review_instructions:
+        description: 'Extra language-specific review instructions'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Claude model to use'
+        required: false
+        type: string
+        default: 'claude-sonnet-4-6'
+      max_turns:
+        description: 'Max conversation turns'
+        required: false
+        type: number
+        default: 20
+      repository_owner:
+        description: 'Expected repository owner for guard condition'
+        required: false
+        type: string
+        default: 'viamrobotics'
+    secrets:
+      # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
+      # in the Internal Usage Workspace on Claude Console.
+      ANTHROPIC_API_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  on-demand-review:
+    if: github.repository_owner == inputs.repository_owner
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PR branch
+        id: pr
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            if (context.eventName === 'issue_comment') {
+              if (!context.payload.issue.pull_request) {
+                core.setFailed('on-demand-review only works on pull request comments.');
+                return;
+              }
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              core.setOutput('ref', pr.head.ref);
+            } else {
+              core.setOutput('ref', context.payload.pull_request.head.ref);
+            }
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          fetch-depth: 1
+
+      - name: Install dependencies
+        if: inputs.install_command != ''
+        run: ${{ inputs.install_command }}
+
+      - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          settings: .claude/settings.ci.json
+          trigger_phrase: "@claude"
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            You are a senior staff engineer performing a rigorous code review.
+            This is a review-only pass — do NOT push code or make changes.
+
+            ## Setup
+
+            1. Read CLAUDE.md for repository conventions and constraints.
+            2. Read every modified file in full to understand context beyond the diff.
+
+            ## Review Checklist
+
+            **Correctness**
+            - Trace the logic end-to-end. Look for off-by-one errors, null/undefined handling, and incorrect type narrowing.
+            - Verify error handling paths: are errors caught, propagated, or silently swallowed?
+            - Check boundary conditions and edge cases.
+
+            **Security**
+            - Check for injection risks (command injection, prototype pollution).
+            - Verify no secrets, credentials, or internal URLs are hardcoded.
+
+            **API Design & Backwards Compatibility**
+            - If the public API surface changed, verify it is backwards-compatible.
+            - Check naming consistency with existing APIs.
+
+            **Patterns & Conventions**
+            - Verify the PR does not introduce new abstractions or patterns that diverge from existing code.
+            - Check that the change is minimal.
+
+            **Tests**
+            - Verify tests exist for the changed behavior.
+            - Tests should cover edge cases and error paths.
+
+            ## Actions
+
+            - Do NOT push code or make changes. This is a review-only pass.
+            - Use inline comments for line-specific feedback.
+            - Post your review summary organized by severity.
+            - If the commenter included specific instructions alongside @claude, focus on those areas first.
+            ${{ inputs.extra_review_instructions }}
+          claude_args: |
+            --model ${{ inputs.model }}
+            --max-turns ${{ inputs.max_turns }}
+            --append-system-prompt "You are a demanding code reviewer. Provide thorough, actionable feedback. Do not push code."
+            --allowedTools "${{ inputs.allowed_tools }}"

@@ -1,0 +1,116 @@
+name: Claude Jira Implementation (Reusable)
+
+# Implements a Jira ticket using Claude Code Action.
+# Creates a branch with claude/ prefix, opens a PR, notifies Slack on failure.
+#
+# Callers handle triggers (repository_dispatch, workflow_dispatch) and pass ticket data.
+
+on:
+  workflow_call:
+    inputs:
+      ticket_id:
+        description: 'Jira ticket ID (e.g., SDK-123)'
+        required: true
+        type: string
+      summary:
+        description: 'Ticket summary'
+        required: true
+        type: string
+      description:
+        description: 'Ticket description'
+        required: true
+        type: string
+      install_command:
+        description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
+        required: false
+        type: string
+        default: ''
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action'
+        required: true
+        type: string
+      extra_prompt:
+        description: 'Extra instructions appended to the Claude prompt'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Claude model to use'
+        required: false
+        type: string
+        default: 'claude-opus-4-6'
+      max_turns:
+        description: 'Max conversation turns'
+        required: false
+        type: number
+        default: 50
+      repository_owner:
+        description: 'Expected repository owner for guard condition'
+        required: false
+        type: string
+        default: 'viamrobotics'
+    secrets:
+      # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
+      # in the Internal Usage Workspace on Claude Console.
+      ANTHROPIC_API_KEY:
+        required: true
+      # Set at viamrobotics org level. Alerts to #ai-workflows-alerts.
+      # Override at the repo level to send to a different Slack channel.
+      SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  implement:
+    if: github.repository_owner == inputs.repository_owner
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
+        if: inputs.install_command != ''
+        run: ${{ inputs.install_command }}
+
+      - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          settings: .claude/settings.ci.json
+          prompt: |
+            Implement the following Jira ticket:
+
+            Ticket: ${{ inputs.ticket_id }}
+            Summary: ${{ inputs.summary }}
+            Description: ${{ inputs.description }}
+
+            Instructions:
+            - Read CLAUDE.md for repository conventions.
+            - Before creating any new file, read 1-2 existing files of the same type.
+            - Add or update unit tests for changed behavior.
+            - Branch name MUST start with `claude/` prefix.
+            - Include the Jira ticket ID in the PR title.
+            ${{ inputs.extra_prompt }}
+          claude_args: |
+            --model ${{ inputs.model }}
+            --max-turns ${{ inputs.max_turns }}
+            --append-system-prompt "Before modifying any file, explore the relevant code first."
+            --allowedTools "${{ inputs.allowed_tools }}"
+
+      - name: Notify Slack of failure
+        if: failure()
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        with:
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "Claude Jira implementation failed for ${{ github.repository }} ${{ inputs.ticket_id }}: ${{ inputs.summary }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}

@@ -1,0 +1,156 @@
+name: Claude Auto Review (Reusable)
+
+# Automatically reviews PRs from claude/* branches after CI passes.
+# Can push fixes directly to the branch.
+#
+# Callers resolve the PR data from workflow_run event and pass it as inputs.
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: string
+      pr_title:
+        description: 'PR title'
+        required: true
+        type: string
+      branch:
+        description: 'PR branch name'
+        required: true
+        type: string
+      install_command:
+        description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
+        required: false
+        type: string
+        default: ''
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action'
+        required: true
+        type: string
+      extra_review_instructions:
+        description: 'Extra language-specific review instructions'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Claude model to use'
+        required: false
+        type: string
+        default: 'claude-sonnet-4-6'
+      max_turns:
+        description: 'Max conversation turns'
+        required: false
+        type: number
+        default: 30
+      repository_owner:
+        description: 'Expected repository owner for guard condition'
+        required: false
+        type: string
+        default: 'viamrobotics'
+    secrets:
+      # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
+      # in the Internal Usage Workspace on Claude Console.
+      ANTHROPIC_API_KEY:
+        required: true
+      GIT_ACCESS_TOKEN:
+        required: true
+      # Set at viamrobotics org level. Alerts to #ai-workflows-alerts.
+      # Override at the repo level to send to a different Slack channel.
+      SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  auto-review:
+    if: github.repository_owner == inputs.repository_owner
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 1
+          token: ${{ secrets.GIT_ACCESS_TOKEN }}
+
+      - name: Install dependencies
+        if: inputs.install_command != ''
+        run: ${{ inputs.install_command }}
+
+      - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          settings: .claude/settings.ci.json
+          allowed_bots: "claude[bot]"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ inputs.pr_number }}
+
+            You are a senior staff engineer performing a rigorous code review.
+            This PR was authored by an AI agent — assume nothing and verify everything.
+
+            ## Setup
+
+            1. Read CLAUDE.md for repository conventions and constraints.
+            2. Read every modified file in full to understand context beyond the diff.
+
+            ## Review Checklist
+
+            **Correctness**
+            - Trace the logic end-to-end. Look for off-by-one errors, null/undefined handling, and incorrect type narrowing.
+            - Verify error handling paths: are errors caught, propagated, or silently swallowed?
+            - Check boundary conditions and edge cases.
+
+            **Security**
+            - Check for injection risks (command injection, prototype pollution).
+            - Verify no secrets, credentials, or internal URLs are hardcoded.
+            - Ensure user/external input is validated at system boundaries.
+
+            **API Design & Backwards Compatibility**
+            - If the public API surface changed, verify it is backwards-compatible.
+            - Check naming consistency with existing APIs in the codebase.
+
+            **Patterns & Conventions**
+            - Verify the PR does not introduce new abstractions or patterns that diverge from existing code.
+            - Check that the change is minimal — no unnecessary refactors, no scope creep.
+
+            **Tests**
+            - Verify tests exist for the changed behavior.
+            - Tests should cover edge cases and error paths — not just happy paths.
+
+            **Performance**
+            - Look for unnecessary allocations, missing cleanup/disposal, or O(n^2) patterns.
+
+            ## Actions
+
+            - If you find issues, fix them directly: edit the files, commit, and push.
+            - Use inline comments for targeted feedback.
+            - Post a review summary using `gh pr review` with `--comment` or `--request-changes`.
+            - Do NOT use `--approve`. A human must approve the PR.
+            - IMPORTANT: For `gh pr review` and `gh pr comment`, write the body to `/tmp/review-body.md` first, then use `--body-file /tmp/review-body.md`.
+            ${{ inputs.extra_review_instructions }}
+          claude_args: |
+            --model ${{ inputs.model }}
+            --max-turns ${{ inputs.max_turns }}
+            --append-system-prompt "You are a demanding code reviewer. Be thorough and skeptical."
+            --allowedTools "${{ inputs.allowed_tools }}"
+
+      - name: Notify Slack of failure
+        if: failure()
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        with:
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "Claude Code Review failed for PR ${{ github.repository }}#${{ inputs.pr_number }}: ${{ inputs.pr_title }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}

@@ -1,0 +1,211 @@
+name: Claude CI Fix (Reusable)
+
+# Automatically retries CI failures on PRs opened by Claude (claude/* branches).
+# Tracks attempts via labels, caps at max_fix_attempts (default: 2).
+#
+# Callers handle the trigger (workflow_run on CI failure) and pass run_id + branch.
+
+on:
+  workflow_call:
+    inputs:
+      run_id:
+        description: 'Failed workflow run ID'
+        required: true
+        type: string
+      branch:
+        description: 'PR branch name (e.g., claude/SDK-123)'
+        required: true
+        type: string
+      install_command:
+        description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
+        required: false
+        type: string
+        default: ''
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action'
+        required: true
+        type: string
+      extra_prompt:
+        description: 'Extra instructions appended to the Claude prompt'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Claude model to use'
+        required: false
+        type: string
+        default: 'claude-opus-4-6'
+      max_turns:
+        description: 'Max conversation turns'
+        required: false
+        type: number
+        default: 30
+      max_fix_attempts:
+        description: 'Maximum number of fix attempts before giving up'
+        required: false
+        type: number
+        default: 2
+      team_mention:
+        description: 'Team to @mention when max retries exhausted (e.g., @viamrobotics/sdk)'
+        required: true
+        type: string
+      repository_owner:
+        description: 'Expected repository owner for guard condition'
+        required: false
+        type: string
+        default: 'viamrobotics'
+    secrets:
+      # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
+      # in the Internal Usage Workspace on Claude Console.
+      ANTHROPIC_API_KEY:
+        required: true
+      GIT_ACCESS_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  fix-ci:
+    if: github.repository_owner == inputs.repository_owner
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PR and check retry count
+        id: check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          INPUT_BRANCH: ${{ inputs.branch }}
+          MAX_ATTEMPTS: ${{ inputs.max_fix_attempts }}
+        with:
+          script: |
+            const branch = process.env.INPUT_BRANCH;
+            const maxAttempts = parseInt(process.env.MAX_ATTEMPTS);
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${branch}`,
+              state: 'open'
+            });
+
+            if (pulls.length === 0) {
+              core.info('No open PR found for branch ' + branch);
+              core.setOutput('should_fix', 'false');
+              return;
+            }
+
+            const pr = pulls[0];
+            const labels = pr.labels.map(l => l.name);
+
+            if (labels.includes(`claude-fix-${maxAttempts}`)) {
+              core.info(`PR #${pr.number}: max fix attempts (${maxAttempts}) reached, skipping`);
+              core.setOutput('should_fix', 'false');
+              core.setOutput('max_reached', 'true');
+              core.setOutput('pr_number', String(pr.number));
+              return;
+            }
+
+            let attempt = 1;
+            for (let i = maxAttempts - 1; i >= 1; i--) {
+              if (labels.includes(`claude-fix-${i}`)) {
+                attempt = i + 1;
+                break;
+              }
+            }
+            core.info(`PR #${pr.number}: fix attempt ${attempt} of ${maxAttempts}`);
+            core.setOutput('should_fix', 'true');
+            core.setOutput('pr_number', String(pr.number));
+            core.setOutput('attempt', String(attempt));
+            core.setOutput('branch', branch);
+
+      - name: Label fix attempt
+        if: steps.check.outputs.should_fix == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ steps.check.outputs.pr_number }}'),
+              labels: ['claude-fix-${{ steps.check.outputs.attempt }}']
+            });
+
+      - name: Get failure logs
+        if: steps.check.outputs.should_fix == 'true'
+        id: logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          LOGS=$(gh run view "$RUN_ID" \
+            --repo "$GH_REPO" \
+            --log-failed 2>&1 | tail -500)
+          if [ -z "$LOGS" ]; then
+            LOGS=$(gh run view "$RUN_ID" \
+              --repo "$GH_REPO" \
+              --log 2>&1 | tail -500)
+          fi
+          LOGS=$(echo "$LOGS" | sed 's/##\[/\[/g')
+          {
+            echo "content<<__CLAUDE_LOGS_EOF_7f3a__"
+            echo "$LOGS"
+            echo "__CLAUDE_LOGS_EOF_7f3a__"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: steps.check.outputs.should_fix == 'true'
+        with:
+          ref: ${{ steps.check.outputs.branch }}
+          fetch-depth: 1
+          token: ${{ secrets.GIT_ACCESS_TOKEN }}
+
+      - name: Install dependencies
+        if: steps.check.outputs.should_fix == 'true' && inputs.install_command != ''
+        run: ${{ inputs.install_command }}
+
+      - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+        if: steps.check.outputs.should_fix == 'true'
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          settings: .claude/settings.ci.json
+          allowed_bots: "claude[bot]"
+          prompt: |
+            CI failed on PR #${{ steps.check.outputs.pr_number }} (fix attempt ${{ steps.check.outputs.attempt }} of ${{ inputs.max_fix_attempts }}).
+
+            The PR is on branch `${{ steps.check.outputs.branch }}`. Fix the issues and push to this branch.
+
+            CI failure logs:
+            ```
+            ${{ steps.logs.outputs.content }}
+            ```
+
+            Instructions:
+            - Read CLAUDE.md for repository conventions and constraints.
+            - Analyze the failure logs to identify the exact error(s) and the file(s) involved.
+            - Read the failing file(s), then read 1-2 existing files of the same kind to compare patterns.
+            - Understand the root cause before attempting a fix.
+            - Make the minimal fix that matches existing codebase conventions.
+            ${{ inputs.extra_prompt }}
+          claude_args: |
+            --model ${{ inputs.model }}
+            --max-turns ${{ inputs.max_turns }}
+            --append-system-prompt "You are fixing a CI failure. Be precise and methodical."
+            --allowedTools "${{ inputs.allowed_tools }}"
+
+      - name: Comment on PR if max retries exhausted
+        if: steps.check.outputs.max_reached == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ steps.check.outputs.pr_number }}'),
+              body: '${{ inputs.team_mention }} CI is still failing after ${{ inputs.max_fix_attempts }} automated fix attempts. This PR needs human intervention.'
+            });

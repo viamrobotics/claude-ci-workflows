@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.0.1...v1.1.0) (2026-02-21)
+
+
+### Features
+
+* allow to append to the system prompt ([#7](https://github.com/viamrobotics/claude-ci-workflows/issues/7)) ([422cab1](https://github.com/viamrobotics/claude-ci-workflows/commit/422cab195dc4cab9e98a8f97098d97727ba950d6))
+
 ## [1.0.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.0.0...v1.0.1) (2026-02-21)
 
 

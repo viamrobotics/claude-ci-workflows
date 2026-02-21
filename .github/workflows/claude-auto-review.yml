@@ -132,8 +132,8 @@ jobs:
             ## Actions
 
             - If you find issues, fix them directly: edit the files, commit, and push.
-            - Use inline comments for targeted feedback.
-            - Post a review summary using `gh pr review` with `--comment` or `--request-changes`.
+            - For ANY line-specific feedback (design concerns, architectural observations) that you do NOT fix directly, you MUST use `mcp__github_inline_comment__create_inline_comment` to post an inline comment on the exact file and line. Do NOT put line-specific feedback only in the summary.
+            - Post a review summary using `gh pr review` with `--comment` or `--request-changes`. The summary should reference inline comments for details, not duplicate line-level feedback.
             - Do NOT use `--approve`. A human must approve the PR.
             - IMPORTANT: For `gh pr review` and `gh pr comment`, write the body to `/tmp/review-body.md` first, then use `--body-file /tmp/review-body.md`.
             ${{ inputs.extra_review_instructions }}

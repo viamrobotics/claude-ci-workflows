@@ -140,7 +140,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model }}
             --max-turns ${{ inputs.max_turns }}
-            --append-system-prompt "You are a demanding code reviewer. Be thorough and skeptical."
+            --append-system-prompt "You are a demanding code reviewer. Be thorough and skeptical. You MUST read CLAUDE.md before starting — it defines all repository conventions, CI restrictions, and coding patterns. CRITICAL: Use Grep, Glob, and Read tools for all file searching and reading — NEVER use Bash for these operations. Bash is ONLY for build, lint, typecheck, and git commands listed in allowedTools. If a Bash command is denied, switch to a dedicated tool immediately — do NOT retry variations."
             --allowedTools "${{ inputs.allowed_tools }}"
 
       - name: Notify Slack of failure

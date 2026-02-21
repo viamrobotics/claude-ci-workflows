@@ -26,7 +26,12 @@ on:
         required: true
         type: string
       extra_prompt:
-        description: 'Extra instructions appended to the Claude prompt'
+        description: 'Extra instructions appended to the Claude prompt (user message)'
+        required: false
+        type: string
+        default: ''
+      extra_system_prompt:
+        description: 'Extra instructions appended to the Claude system prompt (must be a single line — use YAML >- to fold multi-line text)'
         required: false
         type: string
         default: ''
@@ -195,7 +200,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model }}
             --max-turns ${{ inputs.max_turns }}
-            --append-system-prompt "You are fixing a CI failure. Be precise and methodical."
+            --append-system-prompt "You are fixing a CI failure. Be precise and methodical. You MUST read CLAUDE.md before starting — it defines all repository conventions, CI restrictions, and coding patterns. CRITICAL: Use Grep, Glob, and Read tools for all file searching and reading — NEVER use Bash for these operations. Bash is ONLY for build, lint, typecheck, and git commands listed in allowedTools. If a Bash command is denied, switch to a dedicated tool immediately — do NOT retry variations. ${{ inputs.extra_system_prompt }}"
             --allowedTools "${{ inputs.allowed_tools }}"
 
       - name: Comment on PR if max retries exhausted

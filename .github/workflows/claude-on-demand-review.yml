@@ -128,8 +128,12 @@ jobs:
             ## Actions
 
             - Do NOT push code or make changes. This is a review-only pass.
-            - Use inline comments for line-specific feedback.
-            - Post your review summary organized by severity.
+            - For ANY line-specific feedback (bugs, style issues, nits), you MUST use `mcp__github_inline_comment__create_inline_comment` to post an inline comment on the exact file and line. Do NOT put line-specific feedback only in the summary.
+            - For trivial fixes (whitespace, typos, formatting), include a GitHub suggestion block in the inline comment so the author can apply it with one click:
+              ```suggestion
+              corrected line here
+              ```
+            - Post your review summary organized by severity. The summary should reference inline comments for details, not duplicate line-level feedback.
             - If the commenter included specific instructions alongside @claude, focus on those areas first.
             ${{ inputs.extra_review_instructions }}
           claude_args: |

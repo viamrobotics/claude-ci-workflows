@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.0.0...v1.0.1) (2026-02-21)
+
+
+### Bug Fixes
+
+* Be explicit about inline review behavior ([#5](https://github.com/viamrobotics/claude-ci-workflows/issues/5)) ([84bbc6f](https://github.com/viamrobotics/claude-ci-workflows/commit/84bbc6fd9ed0bfd5da53b3a8edb88dadd4a2bb94))
+
 ## 1.0.0 (2026-02-20)
 
 

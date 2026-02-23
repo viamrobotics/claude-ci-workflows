@@ -8,6 +8,7 @@ name: Claude Jira Implementation (Reusable)
 on:
   workflow_call:
     inputs:
+      # --- Required ---
       ticket_id:
         description: 'Jira ticket ID (e.g., SDK-123)'
         required: true
@@ -20,15 +21,16 @@ on:
         description: 'Ticket description'
         required: true
         type: string
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action'
+        required: true
+        type: string
+      # --- Optional ---
       install_command:
         description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
         required: false
         type: string
         default: ''
-      allowed_tools:
-        description: 'Allowed tools string for claude-code-action'
-        required: true
-        type: string
       extra_prompt:
         description: 'Extra instructions appended to the Claude prompt (user message)'
         required: false
@@ -54,6 +56,16 @@ on:
         required: false
         type: number
         default: 0
+      assignee:
+        description: 'Atlassian display name of the responsible engineer (e.g., "John Doe"). Resolved to a GitHub username by matching against viamrobotics org members.'
+        required: false
+        type: string
+        default: ''
+      assignee_email:
+        description: 'Atlassian email of the responsible engineer. Used as the primary signal for matching to a GitHub username.'
+        required: false
+        type: string
+        default: ''
       repository_owner:
         description: 'Expected repository owner for guard condition'
         required: false
@@ -107,6 +119,108 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Resolve GitHub assignee from Atlassian identity
+        id: assignee
+        if: inputs.assignee != '' || inputs.assignee_email != ''
+        env:
+          ATLASSIAN_NAME: ${{ inputs.assignee }}
+          ATLASSIAN_EMAIL: ${{ inputs.assignee_email }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # shellcheck disable=SC2016
+          # Fetch all org members with login, display name, and email via GraphQL
+          MEMBERS=$(gh api graphql --paginate \
+            -f org="viamrobotics" \
+            -f query='
+              query($org: String!, $endCursor: String) {
+                organization(login: $org) {
+                  membersWithRole(first: 100, after: $endCursor) {
+                    nodes { login name email }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+              }' --jq '.data.organization.membersWithRole.nodes[]' | jq -s '.')
+
+          if [ "$MEMBERS" = "[]" ] || [ -z "$MEMBERS" ]; then
+            echo "::warning::Could not fetch viamrobotics org members"
+            exit 0
+          fi
+
+          GITHUB_USER=""
+
+          # --- Email-based strategies (highest confidence) ---
+
+          # Strategy 1: Exact match on public GitHub email
+          if [ -z "$GITHUB_USER" ] && [ -n "$ATLASSIAN_EMAIL" ]; then
+            EMAIL_LOWER=$(echo "$ATLASSIAN_EMAIL" | tr '[:upper:]' '[:lower:]')
+            GITHUB_USER=$(echo "$MEMBERS" | jq -r --arg s "$EMAIL_LOWER" \
+              '.[] | select(.email != null and .email != "") |
+               select((.email | ascii_downcase) == $s) |
+               .login' | head -1)
+          fi
+
+          # Strategy 2: Match email local part against login (e.g., john.doe@viam.com -> johndoe)
+          if [ -z "$GITHUB_USER" ] && [ -n "$ATLASSIAN_EMAIL" ]; then
+            LOCAL_PART=$(echo "$ATLASSIAN_EMAIL" | cut -d@ -f1 | tr '[:upper:]' '[:lower:]')
+            LOCAL_COMPACT=$(echo "$LOCAL_PART" | tr -d '._-')
+            GITHUB_USER=$(echo "$MEMBERS" | jq -r --arg s "$LOCAL_COMPACT" \
+              '.[] | select((.login | ascii_downcase | gsub("[._-]"; "")) == $s) |
+               .login' | head -1)
+          fi
+
+          # Strategy 3: Match email local part against display name (e.g., john.doe -> "John Doe")
+          if [ -z "$GITHUB_USER" ] && [ -n "$ATLASSIAN_EMAIL" ]; then
+            LOCAL_NORM=$(echo "$LOCAL_PART" | sed 's/[._-]/ /g' | tr -s ' ' | sed 's/^ *//;s/ *$//')
+            GITHUB_USER=$(echo "$MEMBERS" | jq -r --arg s "$LOCAL_NORM" \
+              '.[] | select(.name != null) |
+               select((.name | ascii_downcase | gsub("[._-]"; " ") | gsub(" +"; " ")) == $s) |
+               .login' | head -1)
+          fi
+
+          # --- Display-name-based strategies (fallback) ---
+
+          if [ -z "$GITHUB_USER" ] && [ -n "$ATLASSIAN_NAME" ]; then
+            INPUT_LOWER=$(echo "$ATLASSIAN_NAME" | tr '[:upper:]' '[:lower:]')
+            INPUT_NORM=$(echo "$INPUT_LOWER" | sed 's/[._-]/ /g' | tr -s ' ' | sed 's/^ *//;s/ *$//')
+            INPUT_COMPACT=$(echo "$INPUT_NORM" | tr -d ' ')
+
+            # Strategy 4: Exact match on display name (case-insensitive, separators normalized)
+            GITHUB_USER=$(echo "$MEMBERS" | jq -r --arg s "$INPUT_NORM" \
+              '.[] | select(.name != null) |
+               select((.name | ascii_downcase | gsub("[._-]"; " ") | gsub(" +"; " ")) == $s) |
+               .login' | head -1)
+
+            # Strategy 5: Exact match on login
+            if [ -z "$GITHUB_USER" ]; then
+              GITHUB_USER=$(echo "$MEMBERS" | jq -r --arg s "$INPUT_LOWER" \
+                '.[] | select((.login | ascii_downcase) == $s) | .login' | head -1)
+            fi
+
+            # Strategy 6: Compact match (strip all separators from both sides)
+            if [ -z "$GITHUB_USER" ]; then
+              GITHUB_USER=$(echo "$MEMBERS" | jq -r --arg s "$INPUT_COMPACT" \
+                '.[] | select((.login | ascii_downcase | gsub("[._-]"; "")) == $s) |
+                 .login' | head -1)
+            fi
+
+            # Strategy 7: All input tokens appear in the display name
+            if [ -z "$GITHUB_USER" ]; then
+              GITHUB_USER=$(echo "$MEMBERS" | jq -r --arg s "$INPUT_NORM" \
+                '($s | split(" ")) as $tokens |
+                 .[] | select(.name != null) |
+                 (.name | ascii_downcase | gsub("[._-]"; " ") | split(" ")) as $parts |
+                 select(all($tokens[]; . as $t | any($parts[]; startswith($t)))) |
+                 .login' | head -1)
+            fi
+          fi
+
+          if [ -n "$GITHUB_USER" ]; then
+            echo "github_user=$GITHUB_USER" >> "$GITHUB_OUTPUT"
+            echo "Resolved Atlassian identity -> GitHub user: $GITHUB_USER"
+          else
+            echo "::warning::Could not match Atlassian identity (name='$ATLASSIAN_NAME', email='$ATLASSIAN_EMAIL') to any GitHub user in viamrobotics org"
+          fi
+
       - name: Install dependencies
         if: inputs.install_command != ''
         run: ${{ inputs.install_command }}
@@ -128,12 +242,28 @@ jobs:
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
             - Include the Jira ticket ID in the PR title.
+            ${{ steps.assignee.outputs.github_user != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', steps.assignee.outputs.github_user) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
             --model ${{ inputs.model }}
             --max-turns ${{ needs.resolve-complexity.outputs.max_turns }}
             --append-system-prompt "You MUST read CLAUDE.md before starting — it defines all repository conventions, CI restrictions, and coding patterns. Before modifying any file, explore the relevant code first. CRITICAL: Use Grep, Glob, and Read tools for all file searching and reading — NEVER use Bash for these operations. Bash is ONLY for build, lint, typecheck, and git commands listed in allowedTools. If a Bash command is denied, switch to a dedicated tool immediately — do NOT retry variations. ${{ inputs.extra_system_prompt }}"
             --allowedTools "${{ inputs.allowed_tools }}"
+
+      - name: Assign responsible engineer to PR
+        if: steps.assignee.outputs.github_user != ''
+        env:
+          TICKET_ID: ${{ inputs.ticket_id }}
+          GITHUB_USER: ${{ steps.assignee.outputs.github_user }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=$(gh pr list --state open --search "$TICKET_ID in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --add-assignee "$GITHUB_USER"
+            echo "Assigned $GITHUB_USER to PR #$PR_NUMBER"
+          else
+            echo "::warning::Could not find open PR with ticket ID '$TICKET_ID' to assign"
+          fi
 
       - name: Notify Slack of failure
         if: failure()

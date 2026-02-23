@@ -8,6 +8,7 @@ name: Claude CI Fix (Reusable)
 on:
   workflow_call:
     inputs:
+      # --- Required ---
       run_id:
         description: 'Failed workflow run ID'
         required: true
@@ -16,15 +17,20 @@ on:
         description: 'PR branch name (e.g., claude/SDK-123)'
         required: true
         type: string
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action'
+        required: true
+        type: string
+      team_mention:
+        description: 'Team to @mention when max retries exhausted (e.g., @viamrobotics/sdk)'
+        required: true
+        type: string
+      # --- Optional ---
       install_command:
         description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
         required: false
         type: string
         default: ''
-      allowed_tools:
-        description: 'Allowed tools string for claude-code-action'
-        required: true
-        type: string
       extra_prompt:
         description: 'Extra instructions appended to the Claude prompt (user message)'
         required: false
@@ -50,10 +56,6 @@ on:
         required: false
         type: number
         default: 2
-      team_mention:
-        description: 'Team to @mention when max retries exhausted (e.g., @viamrobotics/sdk)'
-        required: true
-        type: string
       repository_owner:
         description: 'Expected repository owner for guard condition'
         required: false

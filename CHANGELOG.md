@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.1.0...v1.2.0) (2026-02-23)
+
+
+### Features
+
+* add task_complexity input to jira workflow ([#9](https://github.com/viamrobotics/claude-ci-workflows/issues/9)) ([ab2e348](https://github.com/viamrobotics/claude-ci-workflows/commit/ab2e3482da410fa013c7905bb74c9a567ab12d5c))
+
 ## [1.1.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.0.1...v1.1.0) (2026-02-21)
 
 

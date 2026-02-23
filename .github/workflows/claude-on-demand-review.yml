@@ -9,15 +9,17 @@ name: Claude On-Demand Review (Reusable)
 on:
   workflow_call:
     inputs:
+      # --- Required ---
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action (read-only)'
+        required: true
+        type: string
+      # --- Optional ---
       install_command:
         description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
         required: false
         type: string
         default: ''
-      allowed_tools:
-        description: 'Allowed tools string for claude-code-action (read-only)'
-        required: true
-        type: string
       extra_review_instructions:
         description: 'Extra language-specific review instructions'
         required: false

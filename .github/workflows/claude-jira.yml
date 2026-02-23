@@ -8,6 +8,7 @@ name: Claude Jira Implementation (Reusable)
 on:
   workflow_call:
     inputs:
+      # --- Required ---
       ticket_id:
         description: 'Jira ticket ID (e.g., SDK-123)'
         required: true
@@ -20,15 +21,16 @@ on:
         description: 'Ticket description'
         required: true
         type: string
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action'
+        required: true
+        type: string
+      # --- Optional ---
       install_command:
         description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
         required: false
         type: string
         default: ''
-      allowed_tools:
-        description: 'Allowed tools string for claude-code-action'
-        required: true
-        type: string
       extra_prompt:
         description: 'Extra instructions appended to the Claude prompt (user message)'
         required: false

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.2.0...v1.3.0) (2026-02-23)
+
+
+### Features
+
+* add responsible engineer ([#11](https://github.com/viamrobotics/claude-ci-workflows/issues/11)) ([b8b2c08](https://github.com/viamrobotics/claude-ci-workflows/commit/b8b2c08f11102bcde21df4b343811933330aefd1))
+
 ## [1.2.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.1.0...v1.2.0) (2026-02-23)
 
 

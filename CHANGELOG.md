@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.3.0...v1.4.0) (2026-02-23)
+
+
+### Features
+
+* Consolidate CI related claude instructions ([#14](https://github.com/viamrobotics/claude-ci-workflows/issues/14)) ([72bb473](https://github.com/viamrobotics/claude-ci-workflows/commit/72bb473895208bb0972fff6b13fdafcfe4965dca))
+
 ## [1.3.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.2.0...v1.3.0) (2026-02-23)
 
 

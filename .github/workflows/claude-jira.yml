@@ -37,7 +37,7 @@ on:
         type: string
         default: ''
       extra_system_prompt:
-        description: 'Extra instructions appended to the Claude system prompt (must be a single line — use YAML >- to fold multi-line text)'
+        description: 'Extra instructions appended to the CI system prompt file'
         required: false
         type: string
         default: ''
@@ -225,6 +225,26 @@ jobs:
         if: inputs.install_command != ''
         run: ${{ inputs.install_command }}
 
+      - name: Checkout CI prompts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: viamrobotics/claude-ci-workflows
+          ref: ${{ github.workflow_sha }}
+          path: .ci-prompts
+          sparse-checkout: prompts/
+          sparse-checkout-cone-mode: false
+
+      - name: Assemble CI system prompt
+        env:
+          EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
+        run: |
+          echo "Before modifying any file, explore the relevant code first." > /tmp/ci-system-prompt.md
+          echo "" >> /tmp/ci-system-prompt.md
+          cat .ci-prompts/prompts/ci-common.md >> /tmp/ci-system-prompt.md
+          if [ -n "$EXTRA_SYSTEM_PROMPT" ]; then
+            printf '\n%s\n' "$EXTRA_SYSTEM_PROMPT" >> /tmp/ci-system-prompt.md
+          fi
+
       - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -247,7 +267,7 @@ jobs:
           claude_args: |
             --model ${{ inputs.model }}
             --max-turns ${{ needs.resolve-complexity.outputs.max_turns }}
-            --append-system-prompt "You MUST read CLAUDE.md before starting — it defines all repository conventions, CI restrictions, and coding patterns. Before modifying any file, explore the relevant code first. CRITICAL: Use Grep, Glob, and Read tools for all file searching and reading — NEVER use Bash for these operations. Bash is ONLY for build, lint, typecheck, and git commands listed in allowedTools. If a Bash command is denied, switch to a dedicated tool immediately — do NOT retry variations. ${{ inputs.extra_system_prompt }}"
+            --append-system-prompt-file /tmp/ci-system-prompt.md
             --allowedTools "${{ inputs.allowed_tools }}"
 
       - name: Assign responsible engineer to PR

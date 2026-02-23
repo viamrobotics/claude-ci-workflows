@@ -44,11 +44,16 @@ on:
         required: false
         type: string
         default: 'claude-opus-4-6'
+      task_complexity:
+        description: 'Task complexity: small (50 turns), medium (75), large (100). Ignored if max_turns is set.'
+        required: false
+        type: string
+        default: 'small'
       max_turns:
-        description: 'Max conversation turns'
+        description: 'Max conversation turns (overrides task_complexity if > 0)'
         required: false
         type: number
-        default: 50
+        default: 0
       repository_owner:
         description: 'Expected repository owner for guard condition'
         required: false
@@ -68,7 +73,29 @@ permissions:
   contents: read
 
 jobs:
+  resolve-complexity:
+    runs-on: ubuntu-latest
+    outputs:
+      max_turns: ${{ steps.resolve.outputs.max_turns }}
+    steps:
+      - name: Map task complexity to max turns
+        id: resolve
+        env:
+          MAX_TURNS: ${{ inputs.max_turns }}
+          COMPLEXITY: ${{ inputs.task_complexity }}
+        run: |
+          if [ "$MAX_TURNS" -gt 0 ] 2>/dev/null; then
+            echo "max_turns=$MAX_TURNS" >> "$GITHUB_OUTPUT"
+          else
+            case "$COMPLEXITY" in
+              medium) echo "max_turns=75" >> "$GITHUB_OUTPUT" ;;
+              large)  echo "max_turns=100" >> "$GITHUB_OUTPUT" ;;
+              *)      echo "max_turns=50" >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+
   implement:
+    needs: resolve-complexity
     if: github.repository_owner == inputs.repository_owner
     permissions:
       contents: write
@@ -104,7 +131,7 @@ jobs:
             ${{ inputs.extra_prompt }}
           claude_args: |
             --model ${{ inputs.model }}
-            --max-turns ${{ inputs.max_turns }}
+            --max-turns ${{ needs.resolve-complexity.outputs.max_turns }}
             --append-system-prompt "You MUST read CLAUDE.md before starting — it defines all repository conventions, CI restrictions, and coding patterns. Before modifying any file, explore the relevant code first. CRITICAL: Use Grep, Glob, and Read tools for all file searching and reading — NEVER use Bash for these operations. Bash is ONLY for build, lint, typecheck, and git commands listed in allowedTools. If a Bash command is denied, switch to a dedicated tool immediately — do NOT retry variations. ${{ inputs.extra_system_prompt }}"
             --allowedTools "${{ inputs.allowed_tools }}"
 

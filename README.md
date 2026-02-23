@@ -73,6 +73,19 @@ Jira ticket dispatched (repository_dispatch or manual)
 | `model` | string | no | varies | Claude model ID |
 | `max_turns` | number | no | varies | Max conversation turns |
 | `repository_owner` | string | no | `viamrobotics` | Guard condition |
+| `extra_prompt` | string | no | `''` | Extra instructions appended to the Claude prompt |
+| `extra_system_prompt` | string | no | `''` | Extra instructions appended to the Claude system prompt |
+
+### jira specific inputs
+
+| Input | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `ticket_id` | string | yes | - | Jira ticket ID (e.g., SDK-123) |
+| `summary` | string | yes | - | Ticket summary |
+| `description` | string | yes | - | Ticket description |
+| `task_complexity` | string | no | `small` | `small` (50 turns), `medium` (75), `large` (100). Ignored if `max_turns` is set. |
+| `assignee` | string | no | `''` | Atlassian display name of the responsible engineer. Resolved to a GitHub username by matching against viamrobotics org members. |
+| `assignee_email` | string | no | `''` | Atlassian email of the responsible engineer. Used as the primary signal for matching. |
 
 ### ci-fix specific inputs
 
@@ -83,6 +96,21 @@ Jira ticket dispatched (repository_dispatch or manual)
 | `max_fix_attempts` | number | no | `2` | Max fix attempts before giving up |
 | `team_mention` | string | yes | - | GitHub team to @mention when retries exhausted |
 
+### auto-review specific inputs
+
+| Input | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `pr_number` | string | yes | - | PR number to review |
+| `pr_title` | string | yes | - | PR title |
+| `branch` | string | yes | - | PR branch name |
+| `extra_review_instructions` | string | no | `''` | Additional review instructions |
+
+### on-demand-review specific inputs
+
+| Input | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `extra_review_instructions` | string | no | `''` | Additional review instructions |
+
 ### Secrets
 
 | Secret | Used by | Required | Description |
@@ -92,6 +120,32 @@ Jira ticket dispatched (repository_dispatch or manual)
 | `SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL` | jira, auto-review | no | Set at viamrobotics org level; alerts to `#ai-workflows-alerts`. Override at the repo level to send to a different Slack channel. |
 
 ## Caller examples
+
+### Jira caller
+
+```yaml
+name: Claude Jira
+
+on:
+  repository_dispatch:
+    types: [jira-ticket]
+
+jobs:
+  implement:
+    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-jira.yml@main
+    with:
+      ticket_id: ${{ github.event.client_payload.ticket_id }}
+      summary: ${{ github.event.client_payload.summary }}
+      description: ${{ github.event.client_payload.description }}
+      task_complexity: ${{ github.event.client_payload.task_complexity || 'small' }}
+      assignee: ${{ github.event.client_payload.assignee }}
+      assignee_email: ${{ github.event.client_payload.assignee_email }}
+      install_command: npm ci  # your install command
+      allowed_tools: 'Edit,Read,Write,Glob,Grep,Bash(npm run build*),Bash(npm run lint*),Bash(npm run test*),Bash(git *)'
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
+```
 
 ### CI fix caller
 

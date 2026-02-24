@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.4.0...v1.4.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* fix workflow sha ([#16](https://github.com/viamrobotics/claude-ci-workflows/issues/16)) ([a8c2f4e](https://github.com/viamrobotics/claude-ci-workflows/commit/a8c2f4e1f8216cb97fc883504cc7cd956c6c430d))
+
 ## [1.4.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.3.0...v1.4.0) (2026-02-23)
 
 

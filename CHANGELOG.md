@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.5.0...v1.5.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* move system prompt to env ([#20](https://github.com/viamrobotics/claude-ci-workflows/issues/20)) ([5e29706](https://github.com/viamrobotics/claude-ci-workflows/commit/5e29706c9e44186bb75535f0443a443c9b4eee5c))
+
 ## [1.5.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.4.1...v1.5.0) (2026-02-24)
 
 

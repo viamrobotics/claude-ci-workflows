@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.4.1...v1.5.0) (2026-02-24)
+
+
+### Features
+
+* add input to turn on debug ([#18](https://github.com/viamrobotics/claude-ci-workflows/issues/18)) ([5c9190b](https://github.com/viamrobotics/claude-ci-workflows/commit/5c9190b7d7a8da88647fb0bf617a51bac79ff6e3))
+
 ## [1.4.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.4.0...v1.4.1) (2026-02-24)
 
 

@@ -209,6 +209,11 @@ jobs:
           if [ -n "$EXTRA_SYSTEM_PROMPT" ]; then
             printf '\n%s\n' "$EXTRA_SYSTEM_PROMPT" >> /tmp/ci-system-prompt.md
           fi
+          {
+            echo "APPEND_SYSTEM_PROMPT<<__CI_PROMPT_EOF__"
+            cat /tmp/ci-system-prompt.md
+            echo "__CI_PROMPT_EOF__"
+          } >> "$GITHUB_ENV"
 
       - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
         if: steps.check.outputs.should_fix == 'true'
@@ -237,7 +242,6 @@ jobs:
           claude_args: |
             --model ${{ inputs.model }}
             --max-turns ${{ inputs.max_turns }}
-            --append-system-prompt-file /tmp/ci-system-prompt.md
             --allowedTools "${{ inputs.allowed_tools }}"
 
       - name: Comment on PR if max retries exhausted

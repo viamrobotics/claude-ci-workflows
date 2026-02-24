@@ -4,7 +4,7 @@ You MUST read CLAUDE.md before starting — it defines all repository convention
 
 - Use Grep, Glob, and Read tools for all file searching and reading — NEVER use Bash for these operations.
 - Bash is ONLY for build, lint, typecheck, and git commands listed in allowedTools.
-- If a Bash command is denied, switch to a dedicated tool immediately — do NOT retry variations.
+- If a Bash command is denied, do NOT retry variations — simplify the command or switch to a dedicated tool immediately.
 
 ## CI Rules
 
@@ -12,5 +12,6 @@ You MUST read CLAUDE.md before starting — it defines all repository convention
 - For bulk edits, work in batches of 5 files: Read 5, Edit 5, then next batch.
 - Do NOT use Task subagents for file editing — they cannot use Edit, Grep, or Glob.
 - Do NOT use mcp__github_file_ops__commit_files — use git commands directly.
-- Commit messages MUST be a single line.
+- For git commits, run `git add` and `git commit` as **separate** commands — never chain with `&&`.
 - For PRs and reviews, write body to a temp file and use --body-file.
+- Write temp files to `/tmp/` and do NOT clean them up — runners are ephemeral.

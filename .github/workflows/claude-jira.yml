@@ -66,6 +66,11 @@ on:
         required: false
         type: string
         default: ''
+      show_full_output:
+        description: 'Show full JSON output from Claude Code. WARNING: may expose secrets in logs.'
+        required: false
+        type: boolean
+        default: false
       repository_owner:
         description: 'Expected repository owner for guard condition'
         required: false
@@ -254,6 +259,7 @@ jobs:
       - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          show_full_output: ${{ inputs.show_full_output }}
           settings: .claude/settings.ci.json
           prompt: |
             Implement the following Jira ticket:

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.6.0...v1.6.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* prevent wasted CI turns on git commits and Edit-without-Read ([#27](https://github.com/viamrobotics/claude-ci-workflows/issues/27)) ([e8b6a45](https://github.com/viamrobotics/claude-ci-workflows/commit/e8b6a45fa47928e5b0fcbb17adb7498fcfb3a40b))
+
 ## [1.6.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.5.2...v1.6.0) (2026-02-24)
 
 

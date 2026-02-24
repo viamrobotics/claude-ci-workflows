@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.5.2...v1.6.0) (2026-02-24)
+
+
+### Features
+
+* move to gh token generation ([#25](https://github.com/viamrobotics/claude-ci-workflows/issues/25)) ([0f2cb57](https://github.com/viamrobotics/claude-ci-workflows/commit/0f2cb57b6d6bf8b268716dfcb1cee14b8eee675e))
+
 ## [1.5.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.5.1...v1.5.2) (2026-02-24)
 
 

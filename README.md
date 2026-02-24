@@ -109,7 +109,7 @@ Jira ticket dispatched (repository_dispatch or manual)
 
 | Input | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `extra_review_instructions` | string | no | `''` | Additional review instructions |
+| `extra_review_instructions` | string | no | `''` | Additional review instructions. |
 
 ### Secrets
 

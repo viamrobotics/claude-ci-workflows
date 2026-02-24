@@ -176,12 +176,19 @@ jobs:
         if: steps.check.outputs.should_fix == 'true' && inputs.install_command != ''
         run: ${{ inputs.install_command }}
 
+      - name: Resolve reusable workflow ref
+        if: steps.check.outputs.should_fix == 'true'
+        id: workflow-ref
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: echo "ref=${WORKFLOW_REF##*@}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout CI prompts
         if: steps.check.outputs.should_fix == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: viamrobotics/claude-ci-workflows
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ steps.workflow-ref.outputs.ref }}
           path: .ci-prompts
           sparse-checkout: prompts/
           sparse-checkout-cone-mode: false

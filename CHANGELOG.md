@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.6.1...v1.7.0) (2026-02-25)
+
+
+### Features
+
+* Improve ci common ([#29](https://github.com/viamrobotics/claude-ci-workflows/issues/29)) ([2db26b9](https://github.com/viamrobotics/claude-ci-workflows/commit/2db26b9d2ceabb1f0322d5799ef24fdf3913ddd1))
+
 ## [1.6.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.6.0...v1.6.1) (2026-02-24)
 
 

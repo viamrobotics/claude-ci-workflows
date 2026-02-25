@@ -229,7 +229,7 @@ jobs:
                 \"- **Advisory:** [\(.ghsa_id)](https://github.com/advisories/\(.ghsa_id)) | **CVE:** \(.cve_id)\n\" +
                 \"- **Vulnerable range:** \(.vulnerable_range)\n\" +
                 \"- **Patched version:** \(.patched_version)\n\" +
-                \"- **Alert numbers:** \(.alert_numbers | map(\"#\\(.)\") | join(\", \"))\n\" +
+                \"- **Alert numbers:** \(.alert_numbers | map(\"`#\\(.)`\") | join(\", \"))\n\" +
                 \"- **Affected lockfiles:**\n\" +
                 (.manifest_paths | map(\"  - \`\\(.)\`\") | join(\"\n\")) +
                 \"\n\"
@@ -380,7 +380,7 @@ jobs:
                a. Create a branch named `claude/dependabot-sweep-${{ matrix.branch_suffix }}`.
                b. Commit all changes with a clear message.
                c. Push the branch.
-               d. Open a **draft** PR titled: "fix(deps): update ${{ matrix.package }} (${{ matrix.severity }})"
+               d. Open a PR titled: "fix(deps): update ${{ matrix.package }} (${{ matrix.severity }})"
                e. The PR body MUST include:
                   - The advisories resolved (GHSA IDs)
                   - The lockfiles modified

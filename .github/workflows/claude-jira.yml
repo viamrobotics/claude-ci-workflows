@@ -290,7 +290,6 @@ jobs:
 
             Instructions:
             - Read CLAUDE.md for repository conventions.
-            - Before creating any new file, read 1-2 existing files of the same type.
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
             - Include the Jira ticket ID in the PR title.

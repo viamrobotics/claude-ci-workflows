@@ -227,7 +227,7 @@ jobs:
                 \"- **Patched version:** \(.patched_version)\n\" +
                 \"- **Alert numbers:** \(.alert_numbers | map(\"#\\(.)\") | join(\", \"))\n\" +
                 \"- **Affected lockfiles:**\n\" +
-                (.manifest_paths | map(\"  - \\\`\\(.)\\\`\") | join(\"\n\")) +
+                (.manifest_paths | map(\"  - \`\\(.)\`\") | join(\"\n\")) +
                 \"\n\"
               " /tmp/per-package.json
               echo ""

@@ -95,8 +95,9 @@ jobs:
           while true; do
             BATCH=$(gh api \
               "/repos/${GH_REPO}/dependabot/alerts?state=open&per_page=100&page=${PAGE}" \
-              --jq '.' 2>&1) || {
-              echo "::error::Failed to fetch Dependabot alerts (page ${PAGE}). Ensure the GitHub App has vulnerability_alerts:read permission."
+              --jq '.' 2>/tmp/gh-api-err.txt) || {
+              echo "::error::Failed to fetch Dependabot alerts (page ${PAGE}). Ensure the GitHub App has Dependabot alerts:read permission."
+              cat /tmp/gh-api-err.txt >&2
               exit 1
             }
             COUNT=$(echo "$BATCH" | jq 'length')

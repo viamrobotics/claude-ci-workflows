@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.8.0...v1.9.0) (2026-02-25)
+
+
+### Features
+
+* add Dependabot sweep workflow ([#33](https://github.com/viamrobotics/claude-ci-workflows/issues/33)) ([c2267eb](https://github.com/viamrobotics/claude-ci-workflows/commit/c2267ebb7c3508ff9d11b06bcd7fd0304f218f88))
+
 ## [1.8.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.7.0...v1.8.0) (2026-02-25)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.4](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.3...v1.10.4) (2026-02-25)
+
+
+### Bug Fixes
+
+* open prs ready for review on sweep job ([#43](https://github.com/viamrobotics/claude-ci-workflows/issues/43)) ([a2a9f0d](https://github.com/viamrobotics/claude-ci-workflows/commit/a2a9f0dbe2c3267b967821c3a871daa58b062f10))
+
 ## [1.10.3](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.2...v1.10.3) (2026-02-25)
 
 

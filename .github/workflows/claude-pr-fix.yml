@@ -1,7 +1,7 @@
-name: Claude On-Demand Review (Reusable)
+name: Claude PR Fix (Reusable)
 
-# Read-only code review triggered by @claude mention in PR comments.
-# Does NOT push code — review only.
+# Applies fixes to a PR when triggered by @claude-fix in a PR comment.
+# Pushes code to the PR branch — this is NOT a read-only review.
 #
 # Callers handle issue_comment / pull_request_review_comment triggers.
 # The github context is inherited from the caller, so trigger_phrase works correctly.
@@ -11,7 +11,7 @@ on:
     inputs:
       # --- Required ---
       allowed_tools:
-        description: 'Allowed tools string for claude-code-action (read-only)'
+        description: 'Allowed tools string for claude-code-action (must include write tools)'
         required: true
         type: string
       # --- Optional ---
@@ -20,8 +20,13 @@ on:
         required: false
         type: string
         default: ''
-      extra_review_instructions:
-        description: 'Extra language-specific review instructions'
+      extra_prompt:
+        description: 'Extra instructions appended to the Claude prompt (user message)'
+        required: false
+        type: string
+        default: ''
+      extra_system_prompt:
+        description: 'Extra instructions appended to the CI system prompt file'
         required: false
         type: string
         default: ''
@@ -34,7 +39,7 @@ on:
         description: 'Max conversation turns'
         required: false
         type: number
-        default: 20
+        default: 30
       show_full_output:
         description: 'Show full JSON output from Claude Code. WARNING: may expose secrets in logs.'
         required: false
@@ -50,35 +55,19 @@ on:
       # in the Internal Usage Workspace on Claude Console.
       ANTHROPIC_API_KEY:
         required: true
+      GIT_ACCESS_TOKEN:
+        required: true
 
 permissions:
   contents: read
 
 jobs:
-  check-trigger:
+  pr-fix:
     if: github.repository_owner == inputs.repository_owner
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-    steps:
-      - name: Check trigger phrase
-        id: check
-        env:
-          COMMENT_BODY: ${{ github.event.comment.body }}
-        run: |
-          if echo "$COMMENT_BODY" | head -1 | grep -qi '^@claude-fix'; then
-            echo "Comment matches @claude-fix — skipping on-demand review."
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          fi
-
-  on-demand-review:
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
+      issues: write
       id-token: write
     runs-on: ubuntu-latest
     steps:
@@ -89,7 +78,7 @@ jobs:
           script: |
             if (context.eventName === 'issue_comment') {
               if (!context.payload.issue.pull_request) {
-                core.setFailed('on-demand-review only works on pull request comments.');
+                core.setFailed('pr-fix only works on pull request comments.');
                 return;
               }
               const { data: pr } = await github.rest.pulls.get({
@@ -98,14 +87,17 @@ jobs:
                 pull_number: context.issue.number
               });
               core.setOutput('ref', pr.head.ref);
+              core.setOutput('pr_number', String(pr.number));
             } else {
               core.setOutput('ref', context.payload.pull_request.head.ref);
+              core.setOutput('pr_number', String(context.payload.pull_request.number));
             }
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.pr.outputs.ref }}
           fetch-depth: 1
+          token: ${{ secrets.GIT_ACCESS_TOKEN }}
 
       - name: Install dependencies
         if: inputs.install_command != ''
@@ -127,10 +119,15 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Assemble CI system prompt
+        env:
+          EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
         run: |
-          echo "You are a demanding code reviewer. Provide thorough, actionable feedback. Do not push code." > /tmp/ci-system-prompt.md
+          echo "You are fixing a pull request based on reviewer feedback. Be precise and make minimal changes." > /tmp/ci-system-prompt.md
           echo "" >> /tmp/ci-system-prompt.md
           cat .ci-prompts/prompts/ci-common.md >> /tmp/ci-system-prompt.md
+          if [ -n "$EXTRA_SYSTEM_PROMPT" ]; then
+            printf '\n%s\n' "$EXTRA_SYSTEM_PROMPT" >> /tmp/ci-system-prompt.md
+          fi
           {
             echo "APPEND_SYSTEM_PROMPT<<__CI_PROMPT_EOF__"
             cat /tmp/ci-system-prompt.md
@@ -142,53 +139,30 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: ${{ inputs.show_full_output }}
           settings: .claude/settings.ci.json
-          trigger_phrase: "@claude"
+          trigger_phrase: "@claude-fix"
           track_progress: true
+          allowed_bots: "claude[bot]"
           prompt: |
             REPO: ${{ github.repository }}
+            PR: #${{ steps.pr.outputs.pr_number }} on branch `${{ steps.pr.outputs.ref }}`
 
-            You are a senior staff engineer performing a rigorous code review.
-            This is a review-only pass — do NOT push code or make changes.
+            You are a senior engineer fixing a pull request based on the commenter's instructions.
+            Read their comment carefully — it describes exactly what they want changed.
 
             ## Setup
 
             1. Read CLAUDE.md for repository conventions and constraints.
-            2. Read every modified file in full to understand context beyond the diff.
+            2. Read every modified file in full to understand the current PR state.
+            3. Run `git diff origin/main...HEAD` to see the full set of PR changes.
 
-            ## Review Checklist
+            ## Instructions
 
-            **Correctness**
-            - Trace the logic end-to-end. Look for off-by-one errors, null/undefined handling, and incorrect type narrowing.
-            - Verify error handling paths: are errors caught, propagated, or silently swallowed?
-            - Check boundary conditions and edge cases.
-
-            **Security**
-            - Check for injection risks (command injection, prototype pollution).
-            - Verify no secrets, credentials, or internal URLs are hardcoded.
-
-            **API Design & Backwards Compatibility**
-            - If the public API surface changed, verify it is backwards-compatible.
-            - Check naming consistency with existing APIs.
-
-            **Patterns & Conventions**
-            - Verify the PR does not introduce new abstractions or patterns that diverge from existing code.
-            - Check that the change is minimal.
-
-            **Tests**
-            - Verify tests exist for the changed behavior.
-            - Tests should cover edge cases and error paths.
-
-            ## Actions
-
-            - Do NOT push code or make changes. This is a review-only pass.
-            - For ANY line-specific feedback (bugs, style issues, nits), you MUST use `mcp__github_inline_comment__create_inline_comment` to post an inline comment on the exact file and line. Do NOT put line-specific feedback only in the summary.
-            - For trivial fixes (whitespace, typos, formatting), include a GitHub suggestion block in the inline comment so the author can apply it with one click:
-              ```suggestion
-              corrected line here
-              ```
-            - Post your review summary organized by severity. The summary should reference inline comments for details, not duplicate line-level feedback.
-            - If the commenter included specific instructions alongside @claude, focus on those areas first.
-            ${{ inputs.extra_review_instructions }}
+            - Focus on the specific changes requested in the comment.
+            - Make minimal, targeted fixes that follow existing codebase conventions.
+            - After making changes, run any relevant linters or tests to verify correctness.
+            - Commit and push your changes to the PR branch.
+            - Post a brief summary of what you changed as a PR comment.
+            ${{ inputs.extra_prompt }}
           claude_args: |
             --model ${{ inputs.model }}
             --max-turns ${{ inputs.max_turns }}

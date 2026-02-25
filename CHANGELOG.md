@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.1...v1.10.2) (2026-02-25)
+
+
+### Bug Fixes
+
+* use gh api --paginate for Dependabot alerts ([#39](https://github.com/viamrobotics/claude-ci-workflows/issues/39)) ([221cf75](https://github.com/viamrobotics/claude-ci-workflows/commit/221cf751375de8689591528b199886e50d96c3bf))
+
 ## [1.10.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.0...v1.10.1) (2026-02-25)
 
 

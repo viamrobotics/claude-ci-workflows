@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.9.0...v1.10.0) (2026-02-25)
+
+
+### Features
+
+* use GitHub App auth for dependabot sweep workflow ([#35](https://github.com/viamrobotics/claude-ci-workflows/issues/35)) ([c7fe288](https://github.com/viamrobotics/claude-ci-workflows/commit/c7fe288fb59f44eb95e703d8a3eb5206bc346dda))
+
 ## [1.9.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.8.0...v1.9.0) (2026-02-25)
 
 

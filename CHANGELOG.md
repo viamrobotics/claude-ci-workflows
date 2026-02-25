@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.7.0...v1.8.0) (2026-02-25)
+
+
+### Features
+
+* claude pr fix workflow ([#31](https://github.com/viamrobotics/claude-ci-workflows/issues/31)) ([27fa508](https://github.com/viamrobotics/claude-ci-workflows/commit/27fa5084cd2b6556d6f011e72ad32c67c72236d7))
+
 ## [1.7.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.6.1...v1.7.0) (2026-02-25)
 
 

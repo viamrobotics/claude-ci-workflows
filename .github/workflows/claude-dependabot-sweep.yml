@@ -1,0 +1,404 @@
+name: Claude Dependabot Sweep (Reusable)
+
+# Groups open Dependabot alerts by package, creates one GitHub issue per package,
+# then runs Claude in parallel to fix each package and open a separate PR.
+#
+# Callers handle triggers (schedule, workflow_dispatch) and pass configuration.
+
+on:
+  workflow_call:
+    inputs:
+      # --- Required ---
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action'
+        required: true
+        type: string
+      # --- Optional ---
+      install_command:
+        description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
+        required: false
+        type: string
+        default: ''
+      extra_prompt:
+        description: 'Extra instructions appended to the Claude prompt (user message)'
+        required: false
+        type: string
+        default: ''
+      extra_system_prompt:
+        description: 'Extra instructions appended to the system prompt'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Claude model to use'
+        required: false
+        type: string
+        default: 'claude-opus-4-6'
+      max_turns:
+        description: 'Max conversation turns per package fix'
+        required: false
+        type: number
+        default: 30
+      show_full_output:
+        description: 'Show full JSON output from Claude Code. WARNING: may expose secrets in logs.'
+        required: false
+        type: boolean
+        default: false
+      repository_owner:
+        description: 'Expected repository owner for guard condition'
+        required: false
+        type: string
+        default: 'viamrobotics'
+      alert_severity:
+        description: 'Comma-separated severity filter. API values: critical,high,medium,low (note: "medium" shows as "moderate" in the GitHub UI)'
+        required: false
+        type: string
+        default: 'critical,high,medium'
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      GIT_ACCESS_TOKEN:
+        required: true
+      SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  collect-alerts:
+    if: github.repository_owner == inputs.repository_owner
+    permissions:
+      issues: write
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-issues.outputs.matrix }}
+    steps:
+      - name: Fetch open Dependabot alerts
+        env:
+          GH_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SEVERITY_FILTER: ${{ inputs.alert_severity }}
+        run: |
+          ALERTS="[]"
+          PAGE=1
+          while true; do
+            BATCH=$(gh api \
+              "/repos/${GH_REPO}/dependabot/alerts?state=open&per_page=100&page=${PAGE}" \
+              --jq '.' 2>&1) || {
+              echo "::error::Failed to fetch Dependabot alerts (page ${PAGE}). Ensure GIT_ACCESS_TOKEN has security_events scope."
+              exit 1
+            }
+            COUNT=$(echo "$BATCH" | jq 'length')
+            if [ "$COUNT" -eq 0 ]; then
+              break
+            fi
+            ALERTS=$(echo "$ALERTS" "$BATCH" | jq -s '.[0] + .[1]')
+            if [ "$COUNT" -lt 100 ]; then
+              break
+            fi
+            PAGE=$((PAGE + 1))
+            if [ "$PAGE" -gt 5 ]; then
+              echo "::warning::Reached pagination limit (500 alerts). Some alerts may not be included."
+              break
+            fi
+          done
+
+          IFS=',' read -ra SEVS <<< "$SEVERITY_FILTER"
+          SEVERITY_JQ=$(printf '"%s",' "${SEVS[@]}")
+          SEVERITY_JQ="[${SEVERITY_JQ%,}]"
+          FILTERED=$(echo "$ALERTS" | jq --argjson sevs "$SEVERITY_JQ" \
+            '[.[] | select(.security_advisory.severity as $s | $sevs | index($s))]')
+
+          ALERT_COUNT=$(echo "$FILTERED" | jq 'length')
+          echo "Found ${ALERT_COUNT} open alerts matching severity filter: ${SEVERITY_FILTER}"
+
+          echo "$FILTERED" > /tmp/dependabot-alerts.json
+
+      - name: Group alerts by package
+        run: |
+          ALERT_COUNT=$(jq 'length' /tmp/dependabot-alerts.json)
+          if [ "$ALERT_COUNT" -eq 0 ]; then
+            echo "No alerts to process."
+            echo "[]" > /tmp/per-package.json
+            exit 0
+          fi
+
+          # Group by package name, collect all advisories per package
+          jq '
+            group_by(.security_vulnerability.package.name) |
+            map({
+              package: .[0].security_vulnerability.package.name,
+              ecosystem: .[0].security_vulnerability.package.ecosystem,
+              advisories: (
+                group_by(.security_advisory.ghsa_id) |
+                map({
+                  ghsa_id: .[0].security_advisory.ghsa_id,
+                  cve_id: (.[0].security_advisory.cve_id // "N/A"),
+                  severity: .[0].security_advisory.severity,
+                  summary: .[0].security_advisory.summary,
+                  vulnerable_range: .[0].security_vulnerability.vulnerable_version_range,
+                  patched_version: (.[0].security_vulnerability.first_patched_version.identifier // "no fix available"),
+                  alert_numbers: [.[].number],
+                  manifest_paths: [.[].dependency.manifest_path] | unique
+                })
+              ),
+              all_manifest_paths: [.[].dependency.manifest_path] | unique,
+              max_severity: (
+                [.[].security_advisory.severity] |
+                map(if . == "critical" then 0 elif . == "high" then 1 elif . == "medium" then 2 else 3 end) |
+                min |
+                if . == 0 then "critical" elif . == 1 then "high" elif . == 2 then "medium" else "low" end
+              ),
+              alert_count: length
+            }) |
+            sort_by(
+              if .max_severity == "critical" then 0
+              elif .max_severity == "high" then 1
+              elif .max_severity == "medium" then 2
+              else 3 end
+            )
+          ' /tmp/dependabot-alerts.json > /tmp/per-package.json
+
+          PKG_COUNT=$(jq 'length' /tmp/per-package.json)
+          echo "Grouped into ${PKG_COUNT} packages."
+
+      - name: Ensure dependabot-sweep label exists
+        env:
+          GH_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create "dependabot-sweep" \
+            --repo "$GH_REPO" \
+            --description "Consolidated Dependabot vulnerability sweep" \
+            --color "0E8A16" \
+            --force 2>/dev/null || true
+
+      - name: Create issues per package and build matrix
+        id: create-issues
+        env:
+          GH_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PKG_COUNT=$(jq 'length' /tmp/per-package.json)
+          if [ "$PKG_COUNT" -eq 0 ]; then
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          MATRIX_ENTRIES="[]"
+
+          for i in $(seq 0 $((PKG_COUNT - 1))); do
+            PKG=$(jq -r ".[$i].package" /tmp/per-package.json)
+            SEVERITY=$(jq -r ".[$i].max_severity" /tmp/per-package.json)
+            ALERT_COUNT=$(jq -r ".[$i].alert_count" /tmp/per-package.json)
+            ECOSYSTEM=$(jq -r ".[$i].ecosystem" /tmp/per-package.json)
+
+            # Check if an open issue already exists for this package
+            EXISTING=$(gh issue list \
+              --repo "$GH_REPO" \
+              --label "dependabot-sweep" \
+              --state open \
+              --search "fix(deps): update ${PKG}" \
+              --json number \
+              --jq '.[0].number // empty' 2>/dev/null || true)
+
+            # Check if an open PR already exists for this package
+            EXISTING_PR=$(gh pr list \
+              --repo "$GH_REPO" \
+              --head "claude/dependabot-sweep-${PKG}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty' 2>/dev/null || true)
+
+            if [ -n "$EXISTING_PR" ]; then
+              echo "Skipping ${PKG}: open PR #${EXISTING_PR} already exists."
+              continue
+            fi
+
+            # Build issue body
+            {
+              echo "## Dependabot Sweep: \`${PKG}\`"
+              echo ""
+              echo "**Ecosystem:** ${ECOSYSTEM}"
+              echo "**Highest severity:** ${SEVERITY}"
+              echo "**Total alerts:** ${ALERT_COUNT}"
+              echo ""
+              echo "### Advisories"
+              echo ""
+              jq -r ".[$i].advisories[] |
+                \"#### \(.severity | ascii_upcase): \(.summary)\n\" +
+                \"- **Advisory:** [\(.ghsa_id)](https://github.com/advisories/\(.ghsa_id)) | **CVE:** \(.cve_id)\n\" +
+                \"- **Vulnerable range:** \(.vulnerable_range)\n\" +
+                \"- **Patched version:** \(.patched_version)\n\" +
+                \"- **Alert numbers:** \(.alert_numbers | map(\"#\\(.)\") | join(\", \"))\n\" +
+                \"- **Affected lockfiles:**\n\" +
+                (.manifest_paths | map(\"  - \\\`\\(.)\\\`\") | join(\"\n\")) +
+                \"\n\"
+              " /tmp/per-package.json
+              echo ""
+              echo "### Raw data"
+              echo ""
+              echo '```json'
+              jq ".[$i]" /tmp/per-package.json
+              echo '```'
+            } > "/tmp/issue-body-${i}.md"
+
+            TITLE="fix(deps): update ${PKG} (${SEVERITY}, ${ALERT_COUNT} alerts)"
+
+            if [ -n "$EXISTING" ]; then
+              ISSUE_NUMBER="$EXISTING"
+              gh issue edit "$ISSUE_NUMBER" \
+                --repo "$GH_REPO" \
+                --title "$TITLE" \
+                --body-file "/tmp/issue-body-${i}.md"
+              echo "Updated issue #${ISSUE_NUMBER} for ${PKG}"
+            else
+              ISSUE_NUMBER=$(gh issue create \
+                --repo "$GH_REPO" \
+                --title "$TITLE" \
+                --body-file "/tmp/issue-body-${i}.md" \
+                --label "dependabot-sweep" \
+                --json number \
+                --jq '.number')
+              echo "Created issue #${ISSUE_NUMBER} for ${PKG}"
+            fi
+
+            MATRIX_ENTRIES=$(echo "$MATRIX_ENTRIES" | jq \
+              --arg pkg "$PKG" \
+              --arg issue "$ISSUE_NUMBER" \
+              --arg severity "$SEVERITY" \
+              '. + [{"package": $pkg, "issue_number": $issue, "severity": $severity}]')
+          done
+
+          MATRIX=$(echo "$MATRIX_ENTRIES" | jq -c '{include: .}')
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "Matrix: ${MATRIX}"
+
+  fix-dependencies:
+    needs: collect-alerts
+    if: needs.collect-alerts.outputs.matrix != '{"include":[]}' && needs.collect-alerts.outputs.matrix != ''
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.collect-alerts.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GIT_ACCESS_TOKEN }}
+
+      - name: Install dependencies
+        if: inputs.install_command != ''
+        run: ${{ inputs.install_command }}
+
+      - name: Get issue body
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ matrix.issue_number }}
+        run: |
+          {
+            echo "body<<__ISSUE_BODY_EOF_3f7a__"
+            gh issue view "$ISSUE_NUMBER" --repo "$GH_REPO" --json body --jq '.body'
+            echo "__ISSUE_BODY_EOF_3f7a__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Assemble system prompt
+        env:
+          EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
+        run: |
+          {
+            echo "You are resolving Dependabot security vulnerabilities for a single package. Be precise and thorough."
+            echo ""
+            echo "## Tool Usage"
+            echo "- Use Grep, Glob, and Read tools for file searching and reading — do not use Bash for these."
+            echo "- You MUST Read every file before you Edit it."
+            echo ""
+            echo "## Dependency Sweep Rules"
+            echo "- Run install commands (npm ci, npm install, etc.) in each affected directory to regenerate lockfiles."
+            echo "- Do NOT add or update tests unless a code change is required to fix a breaking API change."
+            echo "- Implement the minimal change. No refactors or unnecessary additions."
+            echo "- Follow existing patterns. No new conventions or abstractions."
+            echo ""
+            echo "## Git Commit Rules"
+            echo "- Run git add and git commit as separate commands — never chain with &&."
+            echo "- NEVER use HEREDOC or multi-line strings in git commit commands — write the message to /tmp/commit-msg.txt using the Write tool, then run: git commit --file /tmp/commit-msg.txt"
+            echo "- For PRs, write the body to a temp file and use --body-file."
+            echo "- Write temp files to /tmp/ and do NOT clean them up — runners are ephemeral."
+            if [ -n "$EXTRA_SYSTEM_PROMPT" ]; then
+              printf '\n%s\n' "$EXTRA_SYSTEM_PROMPT"
+            fi
+          } > /tmp/ci-system-prompt.md
+          {
+            echo "APPEND_SYSTEM_PROMPT<<__CI_PROMPT_EOF__"
+            cat /tmp/ci-system-prompt.md
+            echo "__CI_PROMPT_EOF__"
+          } >> "$GITHUB_ENV"
+
+      - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          show_full_output: ${{ inputs.show_full_output }}
+          settings: .claude/settings.ci.json
+          prompt: |
+            You are fixing Dependabot security vulnerabilities for the package `${{ matrix.package }}`.
+            This is tracked in issue #${{ matrix.issue_number }}.
+
+            ## Issue Details
+
+            ${{ steps.issue.outputs.body }}
+
+            ## Instructions
+
+            1. Read CLAUDE.md for repository conventions.
+
+            2. Look at the "Raw data" JSON in the issue above. It contains:
+               - `advisories`: each advisory with `patched_version` and `manifest_paths`
+               - `all_manifest_paths`: every lockfile/manifest affected by this package
+
+            3. For each affected manifest path:
+               a. Navigate to the directory containing the lockfile.
+               b. Update `${{ matrix.package }}` to the patched version (or latest safe version).
+               c. Regenerate the lockfile by running the appropriate install command in that directory.
+
+            4. After updating, run any available build/lint/typecheck commands to verify nothing is broken.
+
+            5. Git workflow:
+               a. Create a branch named `claude/dependabot-sweep-${{ matrix.package }}`.
+               b. Commit all changes with a clear message.
+               c. Push the branch.
+               d. Open a **draft** PR titled: "fix(deps): update ${{ matrix.package }} (${{ matrix.severity }})"
+               e. The PR body MUST include:
+                  - The advisories resolved (GHSA IDs)
+                  - The lockfiles modified
+                  - Any alerts that could NOT be resolved, with an explanation
+                  - "Resolves #${{ matrix.issue_number }}"
+
+            6. If the package has no available fix (`patched_version` is "no fix available"):
+               - Do NOT force-remove or break the dependency.
+               - Note it clearly in the PR description.
+               - Comment on issue #${{ matrix.issue_number }} explaining why it cannot be fixed.
+            ${{ inputs.extra_prompt }}
+          claude_args: |
+            --model ${{ inputs.model }}
+            --max-turns ${{ inputs.max_turns }}
+            --allowedTools "${{ inputs.allowed_tools }}"
+
+      - name: Notify Slack of failure
+        if: failure()
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        with:
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "Dependabot Sweep failed for ${{ github.repository }} (package: ${{ matrix.package }})\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}

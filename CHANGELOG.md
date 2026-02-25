@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.0...v1.10.1) (2026-02-25)
+
+
+### Bug Fixes
+
+* show actual API error when Dependabot alerts fetch fails ([#37](https://github.com/viamrobotics/claude-ci-workflows/issues/37)) ([6e616b6](https://github.com/viamrobotics/claude-ci-workflows/commit/6e616b65476369c8966dc436bda87b5366f23fbd))
+
 ## [1.10.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.9.0...v1.10.0) (2026-02-25)
 
 

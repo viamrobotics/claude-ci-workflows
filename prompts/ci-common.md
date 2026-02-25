@@ -13,6 +13,7 @@ You MUST read CLAUDE.md before starting — it defines all repository convention
 - For bulk edits, work in batches of 5 files: Read file, Edit file, repeat for each file in the batch.
 - Do NOT use Task subagents for file editing — they cannot use Edit, Grep, or Glob.
 - Do NOT use mcp__github_file_ops__commit_files — use git commands directly.
+- Do NOT use TodoWrite — it wastes turns. Instead, outline your full plan (explore → edit → verify → commit) in a single text response before starting work, then execute without progress-tracking tool calls.
 
 ## Git Commit Rules
 

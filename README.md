@@ -11,6 +11,7 @@ Reusable GitHub Actions workflows for Claude-powered CI/CD automation. These wor
 | `claude-auto-review.yml` | Auto-review PRs after CI passes on `claude/*` branches (can push fixes) |
 | `claude-on-demand-review.yml` | Read-only review triggered by `@claude` mention in PR comments |
 | `claude-pr-fix.yml` | Fix a PR when triggered by `@claude-fix` mention in PR comments (pushes code) |
+| `claude-dependabot-sweep.yml` | Consolidate Dependabot alerts into one issue, Claude creates one PR fixing all |
 
 ## Architecture
 
@@ -21,12 +22,14 @@ claude-ci-workflows/.github/workflows/   <-- Reusable workflow_call workflows (t
   claude-auto-review.yml
   claude-on-demand-review.yml
   claude-pr-fix.yml
+  claude-dependabot-sweep.yml
 
 <your-repo>/.github/workflows/           <-- Thin caller workflows (per repo)
   claude-ci-fix.yml       -> calls claude-ci-fix.yml
   claude-jira.yml         -> calls claude-jira.yml
   claude-review.yml       -> calls claude-auto-review.yml + claude-on-demand-review.yml
   claude-pr-fix.yml       -> calls claude-pr-fix.yml
+  claude-dependabot-sweep.yml -> calls claude-dependabot-sweep.yml
 ```
 
 Caller workflows handle **triggers** (e.g., `workflow_run`, `repository_dispatch`, `issue_comment`) and pass **repo-specific configuration** as inputs:
@@ -66,6 +69,10 @@ PR opened on claude/* branch
 
 Jira ticket dispatched (repository_dispatch or manual)
   --> claude-jira.yml (implement ticket, open PR on claude/* branch)
+
+Scheduled cron / manual dispatch
+  --> claude-dependabot-sweep.yml
+       (fetch alerts -> group by package -> one issue per package -> Claude fixes each -> one draft PR per package)
 ```
 
 ## Reusable workflow inputs
@@ -121,13 +128,19 @@ Jira ticket dispatched (repository_dispatch or manual)
 
 No additional required inputs beyond [common inputs](#common-inputs-all-workflows). Uses `@claude-fix` as the trigger phrase. The on-demand review workflow automatically skips when `@claude-fix` is detected, so both can share the same caller trigger without interference.
 
+### dependabot-sweep specific inputs
+
+| Input | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `alert_severity` | string | no | `critical,high,medium` | Comma-separated severity filter. API values: `critical`, `high`, `medium`, `low` (note: `medium` shows as "moderate" in the GitHub UI) |
+
 ### Secrets
 
 | Secret | Used by | Required | Description |
 |--------|---------|----------|-------------|
 | `ANTHROPIC_API_KEY` | all | yes | Set at viamrobotics org level. Key `claude_code_key_jira_github_action` in the Internal Usage Workspace on Claude Console. |
-| `GIT_ACCESS_TOKEN` | ci-fix, auto-review, pr-fix | yes | PAT with repo write access for pushing fixes to branches. |
-| `SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL` | jira, auto-review | no | Set at viamrobotics org level; alerts to `#ai-workflows-alerts`. Override at the repo level to send to a different Slack channel. |
+| `GIT_ACCESS_TOKEN` | ci-fix, auto-review, pr-fix, dependabot-sweep | yes | PAT with repo write access for pushing fixes to branches. Must include `security_events` scope for dependabot-sweep. |
+| `SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL` | jira, auto-review, dependabot-sweep | no | Set at viamrobotics org level; alerts to `#ai-workflows-alerts`. Override at the repo level to send to a different Slack channel. |
 
 ## Caller examples
 
@@ -209,4 +222,30 @@ jobs:
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       GIT_ACCESS_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+```
+
+### Dependabot sweep caller
+
+```yaml
+name: Claude Dependabot Sweep
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6 AM UTC
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep.yml@main
+    with:
+      install_command: npm ci  # your install command
+      allowed_tools: 'Edit,Read,Write,Glob,Grep,Bash(npm ci*),Bash(npm install*),Bash(npm update*),Bash(npm run build*),Bash(npm run lint*),Bash(npm run test*),Bash(npm audit*),Bash(git config *),Bash(git add *),Bash(git commit *),Bash(git push *),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(git checkout *),Bash(git branch *),Bash(git rev-parse *),Bash(git fetch *),Bash(gh pr create*),Bash(gh pr list*)'
+      alert_severity: 'critical,high,medium'
+      extra_prompt: |
+        - This is a monorepo with multiple example directories, each with their own package.json and lockfile.
+        - After updating a dependency, run `npm ci` in that directory to regenerate the lockfile.
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GIT_ACCESS_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+      SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
 ```

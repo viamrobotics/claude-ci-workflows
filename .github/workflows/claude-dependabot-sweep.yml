@@ -90,30 +90,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
           SEVERITY_FILTER: ${{ inputs.alert_severity }}
         run: |
-          ALERTS="[]"
-          PAGE=1
-          while true; do
-            BATCH=$(gh api \
-              "/repos/${GH_REPO}/dependabot/alerts?state=open&per_page=100&page=${PAGE}" \
-              --jq '.' 2>/tmp/gh-api-err.txt) || {
-              echo "::error::Failed to fetch Dependabot alerts (page ${PAGE}). Ensure the GitHub App has Dependabot alerts:read permission."
-              cat /tmp/gh-api-err.txt >&2
-              exit 1
-            }
-            COUNT=$(echo "$BATCH" | jq 'length')
-            if [ "$COUNT" -eq 0 ]; then
-              break
-            fi
-            ALERTS=$(echo "$ALERTS" "$BATCH" | jq -s '.[0] + .[1]')
-            if [ "$COUNT" -lt 100 ]; then
-              break
-            fi
-            PAGE=$((PAGE + 1))
-            if [ "$PAGE" -gt 5 ]; then
-              echo "::warning::Reached pagination limit (500 alerts). Some alerts may not be included."
-              break
-            fi
-          done
+          ALERTS=$(gh api --paginate \
+            "/repos/${GH_REPO}/dependabot/alerts?state=open&per_page=100" \
+            --jq '.' 2>/tmp/gh-api-err.txt | jq -s 'add // []') || {
+            echo "::error::Failed to fetch Dependabot alerts. Ensure the GitHub App has Dependabot alerts:read permission."
+            cat /tmp/gh-api-err.txt >&2
+            exit 1
+          }
 
           IFS=',' read -ra SEVS <<< "$SEVERITY_FILTER"
           SEVERITY_JQ=$(printf '"%s",' "${SEVS[@]}")

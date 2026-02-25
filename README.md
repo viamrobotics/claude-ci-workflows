@@ -10,6 +10,7 @@ Reusable GitHub Actions workflows for Claude-powered CI/CD automation. These wor
 | `claude-jira.yml` | Implement Jira tickets via Claude, create PR on `claude/*` branch |
 | `claude-auto-review.yml` | Auto-review PRs after CI passes on `claude/*` branches (can push fixes) |
 | `claude-on-demand-review.yml` | Read-only review triggered by `@claude` mention in PR comments |
+| `claude-pr-fix.yml` | Fix a PR when triggered by `@claude-fix` mention in PR comments (pushes code) |
 
 ## Architecture
 
@@ -19,11 +20,13 @@ claude-ci-workflows/.github/workflows/   <-- Reusable workflow_call workflows (t
   claude-jira.yml
   claude-auto-review.yml
   claude-on-demand-review.yml
+  claude-pr-fix.yml
 
 <your-repo>/.github/workflows/           <-- Thin caller workflows (per repo)
   claude-ci-fix.yml       -> calls claude-ci-fix.yml
   claude-jira.yml         -> calls claude-jira.yml
   claude-review.yml       -> calls claude-auto-review.yml + claude-on-demand-review.yml
+  claude-pr-fix.yml       -> calls claude-pr-fix.yml
 ```
 
 Caller workflows handle **triggers** (e.g., `workflow_run`, `repository_dispatch`, `issue_comment`) and pass **repo-specific configuration** as inputs:
@@ -57,6 +60,9 @@ PR opened on claude/* branch
 
 @claude mention in PR comment
   --> claude-on-demand-review.yml (read-only review)
+
+@claude-fix mention in PR comment
+  --> claude-pr-fix.yml (fix PR and push code)
 
 Jira ticket dispatched (repository_dispatch or manual)
   --> claude-jira.yml (implement ticket, open PR on claude/* branch)
@@ -111,12 +117,16 @@ Jira ticket dispatched (repository_dispatch or manual)
 |-------|------|----------|---------|-------------|
 | `extra_review_instructions` | string | no | `''` | Additional review instructions. |
 
+### pr-fix specific inputs
+
+No additional required inputs beyond [common inputs](#common-inputs-all-workflows). Uses `@claude-fix` as the trigger phrase. The on-demand review workflow automatically skips when `@claude-fix` is detected, so both can share the same caller trigger without interference.
+
 ### Secrets
 
 | Secret | Used by | Required | Description |
 |--------|---------|----------|-------------|
 | `ANTHROPIC_API_KEY` | all | yes | Set at viamrobotics org level. Key `claude_code_key_jira_github_action` in the Internal Usage Workspace on Claude Console. |
-| `GIT_ACCESS_TOKEN` | ci-fix, auto-review | yes | PAT with repo write access for pushing fixes to branches. |
+| `GIT_ACCESS_TOKEN` | ci-fix, auto-review, pr-fix | yes | PAT with repo write access for pushing fixes to branches. |
 | `SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL` | jira, auto-review | no | Set at viamrobotics org level; alerts to `#ai-workflows-alerts`. Override at the repo level to send to a different Slack channel. |
 
 ## Caller examples
@@ -170,6 +180,32 @@ jobs:
       install_command: npm ci  # your install command
       team_mention: '@viamrobotics/your-team'
       allowed_tools: 'Edit,Read,Write,Glob,Grep,Bash(git config *),Bash(git add *),Bash(git commit *),Bash(git push *),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(git checkout *),Bash(git branch *),Bash(git rev-parse *),Bash(git fetch *)'
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GIT_ACCESS_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+```
+
+### PR fix caller
+
+```yaml
+name: Claude PR Fix
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  pr-fix:
+    if: >-
+      github.repository_owner == 'viamrobotics' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude-fix')
+    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-pr-fix.yml@main
+    with:
+      install_command: npm ci  # your install command
+      allowed_tools: 'Edit,Read,Write,Glob,Grep,Bash(npm run build*),Bash(npm run lint*),Bash(npm run test*),Bash(git config *),Bash(git add *),Bash(git commit *),Bash(git push *),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(git checkout *),Bash(git branch *),Bash(git rev-parse *),Bash(git fetch *)'
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       GIT_ACCESS_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}

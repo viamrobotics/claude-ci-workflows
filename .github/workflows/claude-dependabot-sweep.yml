@@ -90,13 +90,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
           SEVERITY_FILTER: ${{ inputs.alert_severity }}
         run: |
-          ALERTS=$(gh api --paginate \
+          if ! gh api --paginate \
             "/repos/${GH_REPO}/dependabot/alerts?state=open&per_page=100" \
-            --jq '.' 2>/tmp/gh-api-err.txt | jq -s 'add // []') || {
+            --jq '.' > /tmp/gh-api-raw.json 2>/tmp/gh-api-err.txt; then
             echo "::error::Failed to fetch Dependabot alerts. Ensure the GitHub App has Dependabot alerts:read permission."
             cat /tmp/gh-api-err.txt >&2
             exit 1
-          }
+          fi
+          ALERTS=$(jq -s 'add // []' /tmp/gh-api-raw.json)
 
           IFS=',' read -ra SEVS <<< "$SEVERITY_FILTER"
           SEVERITY_JQ=$(printf '"%s",' "${SEVS[@]}")
@@ -188,6 +189,9 @@ jobs:
             ALERT_COUNT=$(jq -r ".[$i].alert_count" /tmp/per-package.json)
             ECOSYSTEM=$(jq -r ".[$i].ecosystem" /tmp/per-package.json)
 
+            # Sanitize package name for use in branch names (e.g., @types/node -> types-node)
+            BRANCH_SUFFIX=$(echo "$PKG" | tr '/@' '-' | sed 's/^-//')
+
             # Check if an open issue already exists for this package
             EXISTING=$(gh issue list \
               --repo "$GH_REPO" \
@@ -200,7 +204,7 @@ jobs:
             # Check if an open PR already exists for this package
             EXISTING_PR=$(gh pr list \
               --repo "$GH_REPO" \
-              --head "claude/dependabot-sweep-${PKG}" \
+              --head "claude/dependabot-sweep-${BRANCH_SUFFIX}" \
               --state open \
               --json number \
               --jq '.[0].number // empty' 2>/dev/null || true)
@@ -248,13 +252,12 @@ jobs:
                 --body-file "/tmp/issue-body-${i}.md"
               echo "Updated issue #${ISSUE_NUMBER} for ${PKG}"
             else
-              ISSUE_NUMBER=$(gh issue create \
+              ISSUE_URL=$(gh issue create \
                 --repo "$GH_REPO" \
                 --title "$TITLE" \
                 --body-file "/tmp/issue-body-${i}.md" \
-                --label "dependabot-sweep" \
-                --json number \
-                --jq '.number')
+                --label "dependabot-sweep")
+              ISSUE_NUMBER="${ISSUE_URL##*/}"
               echo "Created issue #${ISSUE_NUMBER} for ${PKG}"
             fi
 
@@ -262,7 +265,8 @@ jobs:
               --arg pkg "$PKG" \
               --arg issue "$ISSUE_NUMBER" \
               --arg severity "$SEVERITY" \
-              '. + [{"package": $pkg, "issue_number": $issue, "severity": $severity}]')
+              --arg branch "$BRANCH_SUFFIX" \
+              '. + [{"package": $pkg, "issue_number": $issue, "severity": $severity, "branch_suffix": $branch}]')
           done
 
           MATRIX=$(echo "$MATRIX_ENTRIES" | jq -c '{include: .}')
@@ -373,7 +377,7 @@ jobs:
             4. After updating, run any available build/lint/typecheck commands to verify nothing is broken.
 
             5. Git workflow:
-               a. Create a branch named `claude/dependabot-sweep-${{ matrix.package }}`.
+               a. Create a branch named `claude/dependabot-sweep-${{ matrix.branch_suffix }}`.
                b. Commit all changes with a clear message.
                c. Push the branch.
                d. Open a **draft** PR titled: "fix(deps): update ${{ matrix.package }} (${{ matrix.severity }})"
@@ -393,14 +397,26 @@ jobs:
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 
+      - name: Build Slack payload
+        if: failure()
+        id: slack-payload
+        env:
+          REPO: ${{ github.repository }}
+          PKG: ${{ matrix.package }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "payload<<__SLACK_EOF__"
+            jq -nc --arg repo "$REPO" --arg pkg "$PKG" --arg url "$RUN_URL" \
+              '{"text": "Dependabot Sweep failed for \($repo) (package: \($pkg))\n\($url)"}'
+            echo "__SLACK_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Notify Slack of failure
         if: failure()
         uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           webhook-type: incoming-webhook
-          payload: |
-            {
-              "text": "Dependabot Sweep failed for ${{ github.repository }} (package: ${{ matrix.package }})\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }
+          payload: ${{ steps.slack-payload.outputs.payload }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}

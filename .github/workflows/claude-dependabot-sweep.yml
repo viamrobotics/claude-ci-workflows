@@ -229,7 +229,7 @@ jobs:
                 \"- **Advisory:** [\(.ghsa_id)](https://github.com/advisories/\(.ghsa_id)) | **CVE:** \(.cve_id)\n\" +
                 \"- **Vulnerable range:** \(.vulnerable_range)\n\" +
                 \"- **Patched version:** \(.patched_version)\n\" +
-                \"- **Alert numbers:** \(.alert_numbers | map(\"`#\\(.)`\") | join(\", \"))\n\" +
+                \"- **Alert numbers:** \(.alert_numbers | join(\", \"))\n\" +
                 \"- **Affected lockfiles:**\n\" +
                 (.manifest_paths | map(\"  - \`\\(.)\`\") | join(\"\n\")) +
                 \"\n\"
@@ -323,9 +323,17 @@ jobs:
           {
             echo "You are resolving Dependabot security vulnerabilities for a single package. Be precise and thorough."
             echo ""
+            echo "## Critical: Action-First Approach"
+            echo "- ALWAYS try the update command first (e.g. uv add, npm install). Do NOT spend turns investigating compatibility before attempting the update."
+            echo "- If the update command fails, read the error message carefully — it will tell you what the conflict is."
+            echo "- If a tool call is denied, do NOT retry the same tool or variations of it. Move on to a different approach immediately."
+            echo "- You have a limited number of turns. Do not waste them on denied tool calls."
+            echo ""
             echo "## Tool Usage"
             echo "- Use Grep, Glob, and Read tools for file searching and reading — do not use Bash for these."
             echo "- You MUST Read every file before you Edit it."
+            echo "- For package investigation, use ONLY these Bash commands: uv pip show, uv pip index versions, uv add, uv lock."
+            echo "- Do NOT use: python3, pip (without uv prefix), curl, WebFetch, WebSearch, or uv run python3. These are not available."
             echo ""
             echo "## Dependency Sweep Rules"
             echo "- Run install commands (npm ci, npm install, etc.) in each affected directory to regenerate lockfiles."
@@ -371,8 +379,8 @@ jobs:
 
             3. For each affected manifest path:
                a. Navigate to the directory containing the lockfile.
-               b. Update `${{ matrix.package }}` to the patched version (or latest safe version).
-               c. Regenerate the lockfile by running the appropriate install command in that directory.
+               b. Run the update command immediately (e.g. `uv add "${{ matrix.package }}>=$PATCHED_VERSION"`). Do NOT investigate compatibility first — just try the update and let the tool report any errors.
+               c. If the update fails due to a dependency conflict, read the error output carefully. It will tell you which package constrains the version. Then investigate that specific constraint and find the best resolution.
 
             4. After updating, run any available build/lint/typecheck commands to verify nothing is broken.
 
@@ -396,6 +404,45 @@ jobs:
             --model ${{ inputs.model }}
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
+
+      - name: Comment failure details on issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ matrix.issue_number }}
+          PACKAGE: ${{ matrix.package }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          EXEC_LOG="/home/runner/work/_temp/claude-execution-output.json"
+          DETAILS=""
+          if [ -f "$EXEC_LOG" ]; then
+            SUBTYPE=$(jq -r '.subtype // "unknown"' "$EXEC_LOG" 2>/dev/null || echo "unknown")
+            NUM_TURNS=$(jq -r '.num_turns // "?"' "$EXEC_LOG" 2>/dev/null || echo "?")
+            COST=$(jq -r '.total_cost_usd // "?"' "$EXEC_LOG" 2>/dev/null || echo "?")
+            DENIALS=$(jq -r '.permission_denials | length // 0' "$EXEC_LOG" 2>/dev/null || echo "0")
+            DETAILS=$(cat <<TABLE_EOF
+
+          | Detail | Value |
+          |--------|-------|
+          | Failure reason | \`${SUBTYPE}\` |
+          | Turns used | ${NUM_TURNS} |
+          | Permission denials | ${DENIALS} |
+          | Cost | \$${COST} |
+          TABLE_EOF
+            )
+          fi
+
+          {
+            echo "**Sweep failed for \`${PACKAGE}\`**"
+            echo ""
+            echo "The automated fix attempt did not complete successfully."
+            echo "${DETAILS}"
+            echo ""
+            echo "[View workflow run](${RUN_URL})"
+          } > /tmp/failure-comment.md
+
+          gh issue comment "$ISSUE_NUMBER" --repo "$GH_REPO" --body-file /tmp/failure-comment.md
 
       - name: Build Slack payload
         if: failure()

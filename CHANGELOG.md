@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.5](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.4...v1.10.5) (2026-02-26)
+
+
+### Bug Fixes
+
+* sweep prompt and alert numbers ([#45](https://github.com/viamrobotics/claude-ci-workflows/issues/45)) ([8d2fb3d](https://github.com/viamrobotics/claude-ci-workflows/commit/8d2fb3d18372b07d27f5f94e6eb6eadebda2ce0c))
+
 ## [1.10.4](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.3...v1.10.4) (2026-02-25)
 
 

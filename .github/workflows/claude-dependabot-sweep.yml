@@ -405,6 +405,45 @@ jobs:
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 
+      - name: Comment failure details on issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ matrix.issue_number }}
+          PACKAGE: ${{ matrix.package }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          EXEC_LOG="/home/runner/work/_temp/claude-execution-output.json"
+          DETAILS=""
+          if [ -f "$EXEC_LOG" ]; then
+            SUBTYPE=$(jq -r '.subtype // "unknown"' "$EXEC_LOG" 2>/dev/null || echo "unknown")
+            NUM_TURNS=$(jq -r '.num_turns // "?"' "$EXEC_LOG" 2>/dev/null || echo "?")
+            COST=$(jq -r '.total_cost_usd // "?"' "$EXEC_LOG" 2>/dev/null || echo "?")
+            DENIALS=$(jq -r '.permission_denials | length // 0' "$EXEC_LOG" 2>/dev/null || echo "0")
+            DETAILS=$(cat <<TABLE_EOF
+
+          | Detail | Value |
+          |--------|-------|
+          | Failure reason | \`${SUBTYPE}\` |
+          | Turns used | ${NUM_TURNS} |
+          | Permission denials | ${DENIALS} |
+          | Cost | \$${COST} |
+          TABLE_EOF
+            )
+          fi
+
+          {
+            echo "**Sweep failed for \`${PACKAGE}\`**"
+            echo ""
+            echo "The automated fix attempt did not complete successfully."
+            echo "${DETAILS}"
+            echo ""
+            echo "[View workflow run](${RUN_URL})"
+          } > /tmp/failure-comment.md
+
+          gh issue comment "$ISSUE_NUMBER" --repo "$GH_REPO" --body-file /tmp/failure-comment.md
+
       - name: Build Slack payload
         if: failure()
         id: slack-payload

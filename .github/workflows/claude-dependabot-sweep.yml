@@ -379,8 +379,8 @@ jobs:
 
             3. For each affected manifest path:
                a. Navigate to the directory containing the lockfile.
-               b. Run the update command immediately (e.g. `uv add "${{ matrix.package }}>=$PATCHED_VERSION"`). Do NOT investigate compatibility first — just try the update and let the tool report any errors.
-               c. If the update fails due to a dependency conflict, read the error output carefully. It will tell you which package constrains the version. Then investigate that specific constraint and find the best resolution.
+               b. Run the update command (e.g. `uv add "${{ matrix.package }}>=$PATCHED_VERSION"`).
+               c. If it fails due to a dependency conflict, investigate that specific constraint and find the best resolution.
 
             4. After updating, run any available build/lint/typecheck commands to verify nothing is broken.
 

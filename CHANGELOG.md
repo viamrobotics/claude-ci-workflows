@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.6](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.5...v1.10.6) (2026-02-28)
+
+
+### Bug Fixes
+
+* remove redundant prompt instructions in dependabot sweep ([#47](https://github.com/viamrobotics/claude-ci-workflows/issues/47)) ([6796369](https://github.com/viamrobotics/claude-ci-workflows/commit/6796369da6fa020ffdb90d52bba95749a10ee3f3))
+
 ## [1.10.5](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.4...v1.10.5) (2026-02-26)
 
 

@@ -251,30 +251,22 @@ jobs:
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: echo "ref=${WORKFLOW_REF##*@}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout CI prompts
+      - name: Checkout CI prompts and scripts
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: viamrobotics/claude-ci-workflows
           ref: ${{ steps.workflow-ref.outputs.ref }}
           path: .ci-prompts
-          sparse-checkout: prompts/
+          sparse-checkout: |
+            prompts/
+            scripts/
           sparse-checkout-cone-mode: false
 
       - name: Assemble CI system prompt
         env:
+          SYSTEM_PROMPT_PREAMBLE: "Before modifying any file, explore the relevant code first."
           EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
-        run: |
-          echo "Before modifying any file, explore the relevant code first." > /tmp/ci-system-prompt.md
-          echo "" >> /tmp/ci-system-prompt.md
-          cat .ci-prompts/prompts/ci-common.md >> /tmp/ci-system-prompt.md
-          if [ -n "$EXTRA_SYSTEM_PROMPT" ]; then
-            printf '\n%s\n' "$EXTRA_SYSTEM_PROMPT" >> /tmp/ci-system-prompt.md
-          fi
-          {
-            echo "APPEND_SYSTEM_PROMPT<<__CI_PROMPT_EOF__"
-            cat /tmp/ci-system-prompt.md
-            echo "__CI_PROMPT_EOF__"
-          } >> "$GITHUB_ENV"
+        run: .ci-prompts/scripts/assemble-system-prompt.sh
 
       - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
         with:

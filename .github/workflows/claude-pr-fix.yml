@@ -68,6 +68,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      actions: read
       id-token: write
     runs-on: ubuntu-latest
     steps:
@@ -109,30 +110,30 @@ jobs:
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: echo "ref=${WORKFLOW_REF##*@}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout CI prompts
+      - name: Checkout CI prompts and scripts
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: viamrobotics/claude-ci-workflows
           ref: ${{ steps.workflow-ref.outputs.ref }}
           path: .ci-prompts
-          sparse-checkout: prompts/
+          sparse-checkout: |
+            prompts/
+            scripts/
           sparse-checkout-cone-mode: false
+
+      - name: Get failure logs
+        id: logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_BRANCH: ${{ steps.pr.outputs.ref }}
+        run: .ci-prompts/scripts/fetch-failure-logs.sh
 
       - name: Assemble CI system prompt
         env:
+          SYSTEM_PROMPT_PREAMBLE: "You are fixing a pull request based on reviewer feedback. Be precise and make minimal changes."
           EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
-        run: |
-          echo "You are fixing a pull request based on reviewer feedback. Be precise and make minimal changes." > /tmp/ci-system-prompt.md
-          echo "" >> /tmp/ci-system-prompt.md
-          cat .ci-prompts/prompts/ci-common.md >> /tmp/ci-system-prompt.md
-          if [ -n "$EXTRA_SYSTEM_PROMPT" ]; then
-            printf '\n%s\n' "$EXTRA_SYSTEM_PROMPT" >> /tmp/ci-system-prompt.md
-          fi
-          {
-            echo "APPEND_SYSTEM_PROMPT<<__CI_PROMPT_EOF__"
-            cat /tmp/ci-system-prompt.md
-            echo "__CI_PROMPT_EOF__"
-          } >> "$GITHUB_ENV"
+        run: .ci-prompts/scripts/assemble-system-prompt.sh
 
       - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
         with:
@@ -154,6 +155,13 @@ jobs:
             1. Read CLAUDE.md for repository conventions and constraints.
             2. Read every modified file in full to understand the current PR state.
             3. Run `git diff origin/main...HEAD` to see the full set of PR changes.
+
+            ## CI Failure Logs
+
+            If the commenter is asking you to fix CI failures, use these logs to diagnose the issue:
+            ```
+            ${{ steps.logs.outputs.content }}
+            ```
 
             ## Instructions
 

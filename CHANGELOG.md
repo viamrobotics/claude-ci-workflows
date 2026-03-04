@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.11.0...v1.12.0) (2026-03-04)
+
+
+### Features
+
+* add optional container input to all reusable workflows ([#54](https://github.com/viamrobotics/claude-ci-workflows/issues/54)) ([38ef059](https://github.com/viamrobotics/claude-ci-workflows/commit/38ef0590700f9a5eb4d4fcf6b7465d7fc8233e7a))
+
 ## [1.11.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.7...v1.11.0) (2026-03-04)
 
 

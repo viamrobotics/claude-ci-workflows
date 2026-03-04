@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.0...v1.12.1) (2026-03-04)
+
+
+### Bug Fixes
+
+* ensure gh CLI calls run outside caller containers ([#56](https://github.com/viamrobotics/claude-ci-workflows/issues/56)) ([e33e009](https://github.com/viamrobotics/claude-ci-workflows/commit/e33e0098b1d3af09c31b10616e65dbd5ba356474))
+
 ## [1.12.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.11.0...v1.12.0) (2026-03-04)
 
 

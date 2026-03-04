@@ -88,6 +88,7 @@ jobs:
   check-pr:
     if: github.repository_owner == inputs.repository_owner
     permissions:
+      actions: read
       issues: write
     runs-on: ubuntu-latest
     outputs:
@@ -96,6 +97,7 @@ jobs:
       pr_number: ${{ steps.check.outputs.pr_number }}
       attempt: ${{ steps.check.outputs.attempt }}
       branch: ${{ steps.check.outputs.branch }}
+      failure_logs: ${{ steps.logs.outputs.content }}
     steps:
       - name: Get PR and check retry count
         id: check
@@ -156,6 +158,32 @@ jobs:
               labels: ['claude-fix-${{ steps.check.outputs.attempt }}']
             });
 
+      # Fetch failure logs on this bare runner (not inside the caller's
+      # container) so that the gh CLI is always available.
+      - name: Get failure logs
+        id: logs
+        if: steps.check.outputs.should_fix == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          LOGS=$(gh run view "$RUN_ID" --repo "$GH_REPO" --log-failed 2>&1 | tail -500) || true
+          if [ -z "$LOGS" ]; then
+            LOGS=$(gh run view "$RUN_ID" --repo "$GH_REPO" --log 2>&1 | tail -500) || true
+          fi
+          if [ -z "$LOGS" ]; then
+            LOGS="No recent CI failures found."
+          fi
+          # Sanitize GitHub Actions log markers
+          LOGS="${LOGS//##\[/\[}"
+          {
+            echo "content<<__CLAUDE_LOGS_EOF_7f3a__"
+            echo "$LOGS"
+            echo "__CLAUDE_LOGS_EOF_7f3a__"
+          } >> "$GITHUB_OUTPUT"
+
   fix-ci:
     needs: check-pr
     if: needs.check-pr.outputs.should_fix == 'true'
@@ -194,14 +222,6 @@ jobs:
             scripts/
           sparse-checkout-cone-mode: false
 
-      - name: Get failure logs
-        id: logs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_ID: ${{ inputs.run_id }}
-        run: .ci-prompts/scripts/fetch-failure-logs.sh
-
       - name: Assemble CI system prompt
         env:
           SYSTEM_PROMPT_PREAMBLE: "You are fixing a CI failure. Be precise and methodical."
@@ -223,7 +243,7 @@ jobs:
 
             CI failure logs:
             ```
-            ${{ steps.logs.outputs.content }}
+            ${{ needs.check-pr.outputs.failure_logs }}
             ```
 
             Instructions:

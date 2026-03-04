@@ -69,16 +69,16 @@ permissions:
   contents: read
 
 jobs:
-  pr-fix:
+  resolve-pr:
     if: github.repository_owner == inputs.repository_owner
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
       actions: read
-      id-token: write
+      pull-requests: read
     runs-on: ubuntu-latest
-    container: ${{ inputs.container || '' }}
+    outputs:
+      ref: ${{ steps.pr.outputs.ref }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      failure_logs: ${{ steps.logs.outputs.content }}
     steps:
       - name: Get PR branch
         id: pr
@@ -102,9 +102,60 @@ jobs:
               core.setOutput('pr_number', String(context.payload.pull_request.number));
             }
 
+      # Fetch failure logs on this bare runner (not inside the caller's
+      # container) so that the gh CLI is always available.
+      - name: Get failure logs
+        id: logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_BRANCH: ${{ steps.pr.outputs.ref }}
+        run: |
+          set -euo pipefail
+          RESOLVED_RUN_ID=$(gh run list \
+            --branch "$PR_BRANCH" \
+            --repo "$GH_REPO" \
+            --status failure \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty' 2>/dev/null || true)
+          if [ -z "$RESOLVED_RUN_ID" ]; then
+            {
+              echo "content<<__CLAUDE_LOGS_EOF_7f3a__"
+              echo "No recent CI failures found."
+              echo "__CLAUDE_LOGS_EOF_7f3a__"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LOGS=$(gh run view "$RESOLVED_RUN_ID" --repo "$GH_REPO" --log-failed 2>&1 | tail -500) || true
+          if [ -z "$LOGS" ]; then
+            LOGS=$(gh run view "$RESOLVED_RUN_ID" --repo "$GH_REPO" --log 2>&1 | tail -500) || true
+          fi
+          if [ -z "$LOGS" ]; then
+            LOGS="No recent CI failures found."
+          fi
+          # Sanitize GitHub Actions log markers
+          LOGS="${LOGS//##\[/\[}"
+          {
+            echo "content<<__CLAUDE_LOGS_EOF_7f3a__"
+            echo "$LOGS"
+            echo "__CLAUDE_LOGS_EOF_7f3a__"
+          } >> "$GITHUB_OUTPUT"
+
+  pr-fix:
+    needs: resolve-pr
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+      id-token: write
+    runs-on: ubuntu-latest
+    container: ${{ inputs.container || '' }}
+    steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ steps.pr.outputs.ref }}
+          ref: ${{ needs.resolve-pr.outputs.ref }}
           fetch-depth: 1
           token: ${{ secrets.GIT_ACCESS_TOKEN }}
 
@@ -129,14 +180,6 @@ jobs:
             scripts/
           sparse-checkout-cone-mode: false
 
-      - name: Get failure logs
-        id: logs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_BRANCH: ${{ steps.pr.outputs.ref }}
-        run: .ci-prompts/scripts/fetch-failure-logs.sh
-
       - name: Assemble CI system prompt
         env:
           SYSTEM_PROMPT_PREAMBLE: "You are fixing a pull request based on reviewer feedback. Be precise and make minimal changes."
@@ -155,7 +198,7 @@ jobs:
           allowed_bots: "claude[bot]"
           prompt: |
             REPO: ${{ github.repository }}
-            PR: #${{ steps.pr.outputs.pr_number }} on branch `${{ steps.pr.outputs.ref }}`
+            PR: #${{ needs.resolve-pr.outputs.pr_number }} on branch `${{ needs.resolve-pr.outputs.ref }}`
 
             You are a senior engineer fixing a pull request based on the commenter's instructions.
             Read their comment carefully — it describes exactly what they want changed.
@@ -170,7 +213,7 @@ jobs:
 
             If the commenter is asking you to fix CI failures, use these logs to diagnose the issue:
             ```
-            ${{ steps.logs.outputs.content }}
+            ${{ needs.resolve-pr.outputs.failure_logs }}
             ```
 
             ## Instructions

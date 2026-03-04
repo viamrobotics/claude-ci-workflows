@@ -311,18 +311,21 @@ jobs:
         if: inputs.install_command != ''
         run: ${{ inputs.install_command }}
 
+      # Use actions/github-script instead of gh CLI because this job may
+      # run inside a caller-provided container where gh is not available.
+      # JavaScript actions always execute on the host runner.
       - name: Get issue body
         id: issue
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ matrix.issue_number }}
-        run: |
-          {
-            echo "body<<__ISSUE_BODY_EOF_3f7a__"
-            gh issue view "$ISSUE_NUMBER" --repo "$GH_REPO" --json body --jq '.body'
-            echo "__ISSUE_BODY_EOF_3f7a__"
-          } >> "$GITHUB_OUTPUT"
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ matrix.issue_number }}')
+            });
+            core.setOutput('body', issue.body || '');
 
       - name: Assemble system prompt
         env:
@@ -414,12 +417,10 @@ jobs:
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 
-      - name: Comment failure details on issue
+      - name: Build failure comment body
         if: failure()
+        id: failure-comment
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ matrix.issue_number }}
           PACKAGE: ${{ matrix.package }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -443,36 +444,39 @@ jobs:
           fi
 
           {
+            echo "body<<__FAILURE_COMMENT_EOF__"
             echo "**Sweep failed for \`${PACKAGE}\`**"
             echo ""
             echo "The automated fix attempt did not complete successfully."
             echo "${DETAILS}"
             echo ""
             echo "[View workflow run](${RUN_URL})"
-          } > /tmp/failure-comment.md
-
-          gh issue comment "$ISSUE_NUMBER" --repo "$GH_REPO" --body-file /tmp/failure-comment.md
-
-      - name: Build Slack payload
-        if: failure()
-        id: slack-payload
-        env:
-          REPO: ${{ github.repository }}
-          PKG: ${{ matrix.package }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          {
-            echo "payload<<__SLACK_EOF__"
-            jq -nc --arg repo "$REPO" --arg pkg "$PKG" --arg url "$RUN_URL" \
-              '{"text": "Dependabot Sweep failed for \($repo) (package: \($pkg))\n\($url)"}'
-            echo "__SLACK_EOF__"
+            echo "__FAILURE_COMMENT_EOF__"
           } >> "$GITHUB_OUTPUT"
+
+      # Use actions/github-script instead of gh CLI because this job may
+      # run inside a caller-provided container where gh is not available.
+      - name: Comment failure details on issue
+        if: failure() && steps.failure-comment.outputs.body != ''
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ matrix.issue_number }}'),
+              body: `${{ steps.failure-comment.outputs.body }}`
+            });
 
       - name: Notify Slack of failure
         if: failure()
         uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           webhook-type: incoming-webhook
-          payload: ${{ steps.slack-payload.outputs.payload }}
+          payload: |
+            {
+              "text": "Dependabot Sweep failed for ${{ github.repository }} (package: ${{ matrix.package }})\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}

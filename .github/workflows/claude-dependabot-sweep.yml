@@ -324,7 +324,7 @@ jobs:
             echo "You are resolving Dependabot security vulnerabilities for a single package. Be precise and thorough."
             echo ""
             echo "## Critical: Action-First Approach"
-            echo "- ALWAYS try the update command first (e.g. uv add, npm install). Do NOT spend turns investigating compatibility before attempting the update."
+            echo "- ALWAYS try the update command first. Do NOT spend turns investigating compatibility before attempting the update."
             echo "- If the update command fails, read the error message carefully — it will tell you what the conflict is."
             echo "- If a tool call is denied, do NOT retry the same tool or variations of it. Move on to a different approach immediately."
             echo "- You have a limited number of turns. Do not waste them on denied tool calls."
@@ -332,11 +332,10 @@ jobs:
             echo "## Tool Usage"
             echo "- Use Grep, Glob, and Read tools for file searching and reading — do not use Bash for these."
             echo "- You MUST Read every file before you Edit it."
-            echo "- For package investigation, use ONLY these Bash commands: uv pip show, uv pip index versions, uv add, uv lock."
-            echo "- Do NOT use: python3, pip (without uv prefix), curl, WebFetch, WebSearch, or uv run python3. These are not available."
+            echo "- Do NOT use: curl, WebFetch, or WebSearch. These are not available."
             echo ""
             echo "## Dependency Sweep Rules"
-            echo "- Run install commands (npm ci, npm install, etc.) in each affected directory to regenerate lockfiles."
+            echo "- Run the appropriate install/lock commands in each affected directory to regenerate lockfiles."
             echo "- Do NOT add or update tests unless a code change is required to fix a breaking API change."
             echo "- Implement the minimal change. No refactors or unnecessary additions."
             echo "- Follow existing patterns. No new conventions or abstractions."
@@ -379,7 +378,7 @@ jobs:
 
             3. For each affected manifest path:
                a. Navigate to the directory containing the lockfile.
-               b. Run the update command (e.g. `uv add "${{ matrix.package }}>=$PATCHED_VERSION"`).
+               b. Run the appropriate update command for the ecosystem to update the package to the patched version.
                c. If it fails due to a dependency conflict, investigate that specific constraint and find the best resolution.
 
             4. After updating, run any available build/lint/typecheck commands to verify nothing is broken.

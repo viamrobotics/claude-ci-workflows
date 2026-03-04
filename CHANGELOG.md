@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.1...v1.12.2) (2026-03-04)
+
+
+### Bug Fixes
+
+* add pull-requests read permission to check-pr job ([#58](https://github.com/viamrobotics/claude-ci-workflows/issues/58)) ([06d97e1](https://github.com/viamrobotics/claude-ci-workflows/commit/06d97e135ca4dd2e6c4dbf224340b5a495d5886b))
+
 ## [1.12.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.0...v1.12.1) (2026-03-04)
 
 

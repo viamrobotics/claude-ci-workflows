@@ -101,10 +101,11 @@ permissions:
   contents: read
 
 jobs:
-  resolve-complexity:
+  resolve-inputs:
     runs-on: ubuntu-latest
     outputs:
       max_turns: ${{ steps.resolve.outputs.max_turns }}
+      github_user: ${{ steps.assignee.outputs.github_user }}
     steps:
       - name: Map task complexity to max turns
         id: resolve
@@ -121,20 +122,6 @@ jobs:
               *)      echo "max_turns=50" >> "$GITHUB_OUTPUT" ;;
             esac
           fi
-
-  implement:
-    needs: resolve-complexity
-    if: github.repository_owner == inputs.repository_owner
-    permissions:
-      contents: write
-      pull-requests: write
-      id-token: write
-    runs-on: ubuntu-latest
-    container: ${{ inputs.container || '' }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 1
 
       - name: Generate org-scoped token
         id: org-token
@@ -155,8 +142,11 @@ jobs:
           ATLASSIAN_EMAIL: ${{ inputs.assignee_email }}
           GH_TOKEN: ${{ steps.org-token.outputs.token }}
         run: |
+          set -o pipefail
           # shellcheck disable=SC2016
-          # Fetch all org members with login, display name, and email via GraphQL
+          # Fetch all org members with login, display name, and email via GraphQL.
+          # This runs on a bare ubuntu-latest runner (not inside the caller's
+          # container) so that the gh CLI is always available.
           MEMBERS=$(gh api graphql --paginate \
             -f org="viamrobotics" \
             -f query='
@@ -249,6 +239,20 @@ jobs:
             echo "::warning::Could not match Atlassian identity (name='$ATLASSIAN_NAME', email='$ATLASSIAN_EMAIL') to any GitHub user in viamrobotics org"
           fi
 
+  implement:
+    needs: resolve-inputs
+    if: github.repository_owner == inputs.repository_owner
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    runs-on: ubuntu-latest
+    container: ${{ inputs.container || '' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 1
+
       - name: Install dependencies
         if: inputs.install_command != ''
         run: ${{ inputs.install_command }}
@@ -295,18 +299,18 @@ jobs:
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
             - Include the Jira ticket ID in the PR title.
-            ${{ steps.assignee.outputs.github_user != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', steps.assignee.outputs.github_user) || '' }}
+            ${{ needs.resolve-inputs.outputs.github_user != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', needs.resolve-inputs.outputs.github_user) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
             --model ${{ inputs.model }}
-            --max-turns ${{ needs.resolve-complexity.outputs.max_turns }}
+            --max-turns ${{ needs.resolve-inputs.outputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 
       - name: Assign responsible engineer to PR
-        if: steps.assignee.outputs.github_user != ''
+        if: needs.resolve-inputs.outputs.github_user != ''
         env:
           TICKET_ID: ${{ inputs.ticket_id }}
-          GITHUB_USER: ${{ steps.assignee.outputs.github_user }}
+          GITHUB_USER: ${{ needs.resolve-inputs.outputs.github_user }}
           GH_TOKEN: ${{ github.token }}
         run: |
           PR_NUMBER=$(gh pr list --state open --search "$TICKET_ID in:title" --json number --jq '.[0].number' 2>/dev/null || true)

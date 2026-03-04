@@ -54,6 +54,11 @@ on:
         required: false
         type: string
         default: 'critical,high,medium'
+      container:
+        description: 'Container image for the fix job (e.g., "ubuntu:22.04"). Leave empty for bare runner.'
+        required: false
+        type: string
+        default: ''
     secrets:
       ANTHROPIC_API_KEY:
         required: true
@@ -284,6 +289,7 @@ jobs:
       issues: write
       id-token: write
     runs-on: ubuntu-latest
+    container: ${{ inputs.container || '' }}
     strategy:
       matrix: ${{ fromJSON(needs.collect-alerts.outputs.matrix) }}
       fail-fast: false

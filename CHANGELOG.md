@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.7...v1.11.0) (2026-03-04)
+
+
+### Features
+
+* pass AUTH_TEST_CREDENTIALS secret to claude-code-action ([#52](https://github.com/viamrobotics/claude-ci-workflows/issues/52)) ([d079d8b](https://github.com/viamrobotics/claude-ci-workflows/commit/d079d8bcaa7a8902ad3bbd7e403e38a495919e2f))
+
 ## [1.10.7](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.6...v1.10.7) (2026-03-04)
 
 

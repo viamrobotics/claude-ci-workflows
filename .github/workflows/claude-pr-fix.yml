@@ -57,6 +57,8 @@ on:
         required: true
       GIT_ACCESS_TOKEN:
         required: true
+      AUTH_TEST_CREDENTIALS:
+        required: false
 
 permissions:
   contents: read
@@ -136,6 +138,8 @@ jobs:
         run: .ci-prompts/scripts/assemble-system-prompt.sh
 
       - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+        env:
+          AUTH_TEST_CREDENTIALS: ${{ secrets.AUTH_TEST_CREDENTIALS }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: ${{ inputs.show_full_output }}

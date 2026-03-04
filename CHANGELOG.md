@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.7](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.6...v1.10.7) (2026-03-04)
+
+
+### Bug Fixes
+
+* remove language-specific references from dependabot sweep prompts ([#50](https://github.com/viamrobotics/claude-ci-workflows/issues/50)) ([44cc9b8](https://github.com/viamrobotics/claude-ci-workflows/commit/44cc9b8b9149a2fe99d233c6f3dd9916cd9437aa))
+
 ## [1.10.6](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.10.5...v1.10.6) (2026-02-28)
 
 

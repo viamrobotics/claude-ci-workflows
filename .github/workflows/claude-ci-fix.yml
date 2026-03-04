@@ -90,6 +90,7 @@ jobs:
     permissions:
       actions: read
       issues: write
+      pull-requests: read
     runs-on: ubuntu-latest
     outputs:
       should_fix: ${{ steps.check.outputs.should_fix }}

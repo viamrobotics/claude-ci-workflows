@@ -50,6 +50,11 @@ on:
         required: false
         type: string
         default: 'viamrobotics'
+      container:
+        description: 'Container image for the job (e.g., "ubuntu:22.04"). Leave empty for bare runner.'
+        required: false
+        type: string
+        default: ''
     secrets:
       # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
       # in the Internal Usage Workspace on Claude Console.
@@ -73,6 +78,7 @@ jobs:
       actions: read
       id-token: write
     runs-on: ubuntu-latest
+    container: ${{ inputs.container || '' }}
     steps:
       - name: Get PR branch
         id: pr

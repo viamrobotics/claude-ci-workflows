@@ -76,6 +76,11 @@ on:
         required: false
         type: string
         default: 'viamrobotics'
+      container:
+        description: 'Container image for the implement job (e.g., "ubuntu:22.04"). Leave empty for bare runner.'
+        required: false
+        type: string
+        default: ''
     secrets:
       # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
       # in the Internal Usage Workspace on Claude Console.
@@ -125,6 +130,7 @@ jobs:
       pull-requests: write
       id-token: write
     runs-on: ubuntu-latest
+    container: ${{ inputs.container || '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

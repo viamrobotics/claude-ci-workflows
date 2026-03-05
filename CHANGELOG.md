@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.6](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.5...v1.12.6) (2026-03-05)
+
+
+### Bug Fixes
+
+* hardcode main ref for CI prompts checkout ([#66](https://github.com/viamrobotics/claude-ci-workflows/issues/66)) ([88f5049](https://github.com/viamrobotics/claude-ci-workflows/commit/88f504915db89ef0b10be53f138b2d5b1072e8bf))
+
 ## [1.12.5](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.4...v1.12.5) (2026-03-05)
 
 

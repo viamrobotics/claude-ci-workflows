@@ -263,6 +263,7 @@ jobs:
     needs: check-pr
     if: needs.check-pr.outputs.max_reached == 'true'
     permissions:
+      issues: write
       pull-requests: write
     runs-on: ubuntu-latest
     steps:

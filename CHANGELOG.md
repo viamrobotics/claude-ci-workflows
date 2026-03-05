@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.4](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.3...v1.12.4) (2026-03-05)
+
+
+### Bug Fixes
+
+* pass CI failure logs via artifact to avoid ARG_MAX limit ([#62](https://github.com/viamrobotics/claude-ci-workflows/issues/62)) ([ba8346f](https://github.com/viamrobotics/claude-ci-workflows/commit/ba8346fe97b8ddd2ac077d5ccfc0860ee584e60a))
+
 ## [1.12.3](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.2...v1.12.3) (2026-03-05)
 
 

@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Fetches CI failure logs from a GitHub Actions workflow run.
-# Writes the logs to $GITHUB_OUTPUT as "content".
+# Writes the logs to a file (default: .claude/failure-logs.txt).
 #
 # Required env vars:
 #   GH_TOKEN      — GitHub token with actions:read
 #   GH_REPO       — owner/repo
-#   GITHUB_OUTPUT — GitHub Actions output file (set automatically)
 #
 # Optional env vars (provide one):
 #   RUN_ID    — fetch logs from this specific run
 #   PR_BRANCH — discover the latest failed run for this branch
+#
+# Optional:
+#   LOG_OUTPUT_FILE — file path to write logs to (default: .claude/failure-logs.txt)
 #
 # Usage (in a workflow step):
 #   env:
@@ -19,6 +21,9 @@
 #   run: .ci-prompts/scripts/fetch-failure-logs.sh
 
 set -euo pipefail
+
+OUTPUT_FILE="${LOG_OUTPUT_FILE:-/tmp/failure-logs.txt}"
+mkdir -p "$(dirname "$OUTPUT_FILE")"
 
 RESOLVED_RUN_ID="${RUN_ID:-}"
 
@@ -34,30 +39,26 @@ if [ -z "$RESOLVED_RUN_ID" ] && [ -n "${PR_BRANCH:-}" ]; then
 fi
 
 if [ -z "$RESOLVED_RUN_ID" ]; then
-  {
-    echo "content<<__CLAUDE_LOGS_EOF_7f3a__"
-    echo "No recent CI failures found."
-    echo "__CLAUDE_LOGS_EOF_7f3a__"
-  } >> "$GITHUB_OUTPUT"
+  echo "No recent CI failures found." > "$OUTPUT_FILE"
   exit 0
 fi
 
 # Try failed-only logs first, fall back to full logs
 LOGS=$(gh run view "$RESOLVED_RUN_ID" \
   --repo "$GH_REPO" \
-  --log-failed 2>&1 | tail -500)
+  --log-failed 2>&1) || true
 
 if [ -z "$LOGS" ]; then
   LOGS=$(gh run view "$RESOLVED_RUN_ID" \
     --repo "$GH_REPO" \
-    --log 2>&1 | tail -500)
+    --log 2>&1) || true
+fi
+
+if [ -z "$LOGS" ]; then
+  LOGS="No recent CI failures found."
 fi
 
 # Sanitize GitHub Actions log markers that could interfere with workflow commands
 LOGS="${LOGS//##\[/\[}"
 
-{
-  echo "content<<__CLAUDE_LOGS_EOF_7f3a__"
-  echo "$LOGS"
-  echo "__CLAUDE_LOGS_EOF_7f3a__"
-} >> "$GITHUB_OUTPUT"
+echo "$LOGS" > "$OUTPUT_FILE"

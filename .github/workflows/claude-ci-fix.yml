@@ -217,17 +217,11 @@ jobs:
         if: inputs.install_command != ''
         run: ${{ inputs.install_command }}
 
-      - name: Resolve reusable workflow ref
-        id: workflow-ref
-        env:
-          WORKFLOW_REF: ${{ github.workflow_ref }}
-        run: echo "ref=${WORKFLOW_REF##*@}" >> "$GITHUB_OUTPUT"
-
       - name: Checkout CI prompts and scripts
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: viamrobotics/claude-ci-workflows
-          ref: ${{ steps.workflow-ref.outputs.ref }}
+          ref: main
           path: .ci-prompts
           sparse-checkout: |
             prompts/

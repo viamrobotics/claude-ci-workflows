@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.6...v1.13.0) (2026-03-06)
+
+
+### Features
+
+* support pull_request_review trigger in pr-fix workflow ([#68](https://github.com/viamrobotics/claude-ci-workflows/issues/68)) ([d1033e7](https://github.com/viamrobotics/claude-ci-workflows/commit/d1033e7e53d4aa38756e262daaa7ef488e26b4d8))
+
 ## [1.12.6](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.5...v1.12.6) (2026-03-05)
 
 

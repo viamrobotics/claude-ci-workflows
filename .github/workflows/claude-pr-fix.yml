@@ -3,7 +3,8 @@ name: Claude PR Fix (Reusable)
 # Applies fixes to a PR when triggered by @claude-fix in a PR comment.
 # Pushes code to the PR branch — this is NOT a read-only review.
 #
-# Callers handle issue_comment / pull_request_review_comment triggers.
+# Callers handle issue_comment / pull_request_review_comment / pull_request_review triggers.
+# For pull_request_review, callers choose types: [submitted] and/or [edited].
 # The github context is inherited from the caller, so trigger_phrase works correctly.
 
 on:
@@ -101,6 +102,51 @@ jobs:
               core.setOutput('pr_number', String(context.payload.pull_request.number));
             }
 
+      # Fetch review comments when triggered by a pull_request_review event.
+      # The action receives the top-level review body, but line-level comments
+      # need to be fetched separately and passed via artifact.
+      - name: Get review comments
+        if: github.event_name == 'pull_request_review'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const reviewId = context.payload.review.id;
+            const prNumber = context.payload.pull_request.number;
+
+            let output = `## Review Summary\n`;
+            output += `State: ${context.payload.review.state}\n`;
+            output += `${context.payload.review.body || '(no body)'}\n\n`;
+
+            const { data: comments } = await github.rest.pulls.listCommentsForReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              review_id: reviewId
+            });
+
+            if (comments.length > 0) {
+              output += `## Line Comments\n`;
+              for (const c of comments) {
+                const line = c.line || c.original_line || '?';
+                output += `\n### ${c.path}:${line}\n`;
+                if (c.start_line) {
+                  output += `(lines ${c.start_line}-${line})\n`;
+                }
+                output += `${c.body}\n`;
+              }
+            }
+
+            fs.writeFileSync('/tmp/review-comments.txt', output);
+
+      - name: Upload review comments
+        if: github.event_name == 'pull_request_review'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: review-comments
+          path: /tmp/review-comments.txt
+          retention-days: 1
+
       # Fetch failure logs on this bare runner (not inside the caller's
       # container) so that the gh CLI is always available.
       # Logs are uploaded as an artifact and downloaded in pr-fix to avoid
@@ -165,6 +211,13 @@ jobs:
           name: failure-logs
           path: /tmp
 
+      - name: Download review comments
+        if: github.event_name == 'pull_request_review'
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: review-comments
+          path: /tmp
+
       - name: Install dependencies
         if: inputs.install_command != ''
         run: ${{ inputs.install_command }}
@@ -199,15 +252,22 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             PR: #${{ needs.resolve-pr.outputs.pr_number }} on branch `${{ needs.resolve-pr.outputs.ref }}`
+            TRIGGER: ${{ github.event_name }}
 
-            You are a senior engineer fixing a pull request based on the commenter's instructions.
-            Read their comment carefully — it describes exactly what they want changed.
+            You are a senior engineer fixing a pull request based on reviewer feedback.
+            Read the triggering comment carefully — it describes exactly what they want changed.
 
             ## Setup
 
             1. Read CLAUDE.md for repository conventions and constraints.
             2. Read every modified file in full to understand the current PR state.
             3. Run `git diff origin/main...HEAD` to see the full set of PR changes.
+
+            ## Review Comments
+
+            If TRIGGER is `pull_request_review`, read `/tmp/review-comments.txt` for the full
+            review context including line-level comments on specific files. Address all review
+            feedback, not just the top-level summary.
 
             ## CI Failure Logs
 

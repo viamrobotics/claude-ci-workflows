@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.13.0...v1.14.0) (2026-03-12)
+
+
+### Features
+
+* add reusable workflow for implementing GitHub issues ([#71](https://github.com/viamrobotics/claude-ci-workflows/issues/71)) ([eea0437](https://github.com/viamrobotics/claude-ci-workflows/commit/eea0437f2c654b2dd312e00461cb2ef5c7f43410))
+
 ## [1.13.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.12.6...v1.13.0) (2026-03-06)
 
 

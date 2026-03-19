@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.14.0...v1.14.1) (2026-03-19)
+
+
+### Bug Fixes
+
+* break review loop between auto-review and pr-fix workflows ([#74](https://github.com/viamrobotics/claude-ci-workflows/issues/74)) ([42d814c](https://github.com/viamrobotics/claude-ci-workflows/commit/42d814c477ce1b95fbcd2423db7f86bd92edd88a))
+
 ## [1.14.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.13.0...v1.14.0) (2026-03-12)
 
 

@@ -71,7 +71,17 @@ permissions:
 
 jobs:
   resolve-pr:
-    if: github.repository_owner == inputs.repository_owner
+    # Skip bot-authored reviews that don't explicitly contain @claude-fix.
+    # Without this guard, the auto-review workflow posting a review on a claude/*
+    # branch triggers pr-fix, which pushes a commit, which triggers auto-review
+    # again — creating an infinite loop.
+    if: >-
+      github.repository_owner == inputs.repository_owner &&
+      (
+        github.event_name != 'pull_request_review' ||
+        github.event.review.user.type != 'Bot' ||
+        contains(github.event.review.body, '@claude-fix')
+      )
     permissions:
       actions: read
       pull-requests: read

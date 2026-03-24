@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.14.1...v1.15.0) (2026-03-24)
+
+
+### Features
+
+* allow on-demand review to push code changes ([#77](https://github.com/viamrobotics/claude-ci-workflows/issues/77)) ([127a3cb](https://github.com/viamrobotics/claude-ci-workflows/commit/127a3cba2c641300413f5283fc9ddfe95f6d422b))
+
 ## [1.14.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.14.0...v1.14.1) (2026-03-19)
 
 

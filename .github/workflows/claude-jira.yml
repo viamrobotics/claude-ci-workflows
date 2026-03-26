@@ -76,6 +76,16 @@ on:
         required: false
         type: string
         default: 'viamrobotics'
+      jira_base_url:
+        description: 'Jira instance base URL (e.g., "https://myorg.atlassian.net")'
+        required: false
+        type: string
+        default: ''
+      jira_user_email:
+        description: 'Jira user email for API authentication'
+        required: false
+        type: string
+        default: ''
       container:
         description: 'Container image for the implement job (e.g., "ubuntu:22.04"). Leave empty for bare runner.'
         required: false
@@ -95,6 +105,8 @@ on:
       CI_GITHUB_APP_PRIVATE_KEY:
         required: true
       AUTH_TEST_CREDENTIALS:
+        required: false
+      JIRA_API_TOKEN:
         required: false
 
 permissions:
@@ -249,6 +261,21 @@ jobs:
     runs-on: ubuntu-latest
     container: ${{ inputs.container || '' }}
     steps:
+      - name: Comment on Jira ticket that implementation is starting
+        if: inputs.jira_base_url != '' && inputs.jira_user_email != '' && secrets.JIRA_API_TOKEN != ''
+        env:
+          JIRA_BASE_URL: ${{ inputs.jira_base_url }}
+          JIRA_USER_EMAIL: ${{ inputs.jira_user_email }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          TICKET_ID: ${{ inputs.ticket_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -sf -X POST \
+            "$JIRA_BASE_URL/rest/api/3/issue/$TICKET_ID/comment" \
+            -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"🤖 Claude is starting work on this ticket. \"},{\"type\":\"text\",\"text\":\"Follow progress\",\"marks\":[{\"type\":\"link\",\"attrs\":{\"href\":\"$RUN_URL\"}}]}]}]}}"
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 1

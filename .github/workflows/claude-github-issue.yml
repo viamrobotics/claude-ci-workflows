@@ -25,6 +25,11 @@ on:
         description: 'Allowed tools string for claude-code-action'
         required: true
         type: string
+      issue_author:
+        description: 'GitHub username of the issue reporter (assigned to the resulting PR)'
+        required: false
+        type: string
+        default: ''
       # --- Optional ---
       install_command:
         description: 'Command to install dependencies (e.g., "npm ci" or "make install")'
@@ -171,11 +176,27 @@ jobs:
             - Branch name MUST start with `claude/` prefix.
             - Include the issue reference in the PR title (e.g., "feat: implement feature (#${{ inputs.issue_number }})").
             - In the PR description, link to the original issue with `Closes #${{ inputs.issue_number }}`.
+            ${{ inputs.issue_author != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', inputs.issue_author) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
             --model ${{ inputs.model }}
             --max-turns ${{ needs.resolve-inputs.outputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
+
+      - name: Assign issue reporter to PR
+        if: inputs.issue_author != ''
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_AUTHOR: ${{ inputs.issue_author }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=$(gh pr list --state open --search "#$ISSUE_NUMBER in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --add-assignee "$ISSUE_AUTHOR"
+            echo "Assigned $ISSUE_AUTHOR to PR #$PR_NUMBER"
+          else
+            echo "::warning::Could not find open PR referencing issue #$ISSUE_NUMBER to assign"
+          fi
 
       - name: Notify Slack of failure
         if: failure()

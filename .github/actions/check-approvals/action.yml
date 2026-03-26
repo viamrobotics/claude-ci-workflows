@@ -1,0 +1,47 @@
+name: Check PR Approvals
+description: Fails if a pull request does not have the required number of approving reviews
+
+inputs:
+  pr_number:
+    description: 'Pull request number to check'
+    required: true
+  min_approvals:
+    description: 'Minimum number of approving reviews required'
+    required: false
+    default: '2'
+  github_token:
+    description: 'GitHub token with pull-requests read access'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # actions/github-script@v8.0.0
+    - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const { data: reviews } = await github.rest.pulls.listReviews({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: Number('${{ inputs.pr_number }}'),
+          });
+
+          // Keep only the latest review state per non-bot user
+          const latestByUser = {};
+          for (const review of reviews) {
+            if (review.user.type === 'Bot') continue;
+            latestByUser[review.user.login] = review.state;
+          }
+
+          const approvals = Object.values(latestByUser)
+            .filter(state => state === 'APPROVED').length;
+          const required = Number('${{ inputs.min_approvals }}');
+
+          core.info(`Approvals: ${approvals}/${required}`);
+
+          if (approvals < required) {
+            core.setFailed(
+              `Requires ${required} approving reviews (currently ${approvals})`
+            );
+          }

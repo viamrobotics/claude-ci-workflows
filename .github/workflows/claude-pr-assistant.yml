@@ -262,7 +262,7 @@ jobs:
             PR: #${{ needs.resolve-context.outputs.pr_number }} on branch `${{ needs.resolve-context.outputs.ref }}`
             TRIGGER: ${{ github.event_name }}
 
-            You are a senior staff engineer. Read the triggering comment carefully — it describes
+            Read the triggering comment carefully — it describes
             exactly what the commenter wants. You can review code, make fixes, or both depending
             on what is asked.
 

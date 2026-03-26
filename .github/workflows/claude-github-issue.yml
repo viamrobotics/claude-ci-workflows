@@ -103,9 +103,9 @@ jobs:
             echo "max_turns=$MAX_TURNS" >> "$GITHUB_OUTPUT"
           else
             case "$COMPLEXITY" in
-              medium) echo "max_turns=75" >> "$GITHUB_OUTPUT" ;;
-              large)  echo "max_turns=100" >> "$GITHUB_OUTPUT" ;;
-              *)      echo "max_turns=50" >> "$GITHUB_OUTPUT" ;;
+              medium) echo "max_turns=150" >> "$GITHUB_OUTPUT" ;;
+              large)  echo "max_turns=200" >> "$GITHUB_OUTPUT" ;;
+              *)      echo "max_turns=100" >> "$GITHUB_OUTPUT" ;;
             esac
           fi
 

@@ -1,5 +1,5 @@
 name: Check PR Approvals
-description: Fails if a pull request does not have the required number of approving reviews
+description: Fails if a PR lacks required approvals and posts a comment explaining the review process
 
 inputs:
   pr_number:
@@ -10,7 +10,7 @@ inputs:
     required: false
     default: '2'
   github_token:
-    description: 'GitHub token with pull-requests read access'
+    description: 'GitHub token with pull-requests read and issues write access'
     required: true
 
 runs:
@@ -41,6 +41,55 @@ runs:
           core.info(`Approvals: ${approvals}/${required}`);
 
           if (approvals < required) {
+            // Fetch the PR to get the assignee
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number('${{ inputs.pr_number }}'),
+            });
+            const assignee = pr.assignee ? `@${pr.assignee.login}` : 'the assignee';
+
+            // Post an informational comment explaining the review requirements
+            const marker = '<!-- check-approvals-notice -->';
+            const body = [
+              marker,
+              '## Review Required',
+              '',
+              `This PR was opened by Claude and requires a minimum of **${required} approving reviews** before it can be merged.`,
+              '',
+              '**Review process:**',
+              `1. ${assignee} — as the person who triggered this Claude workflow, you should review the code thoroughly and submit your approval.`,
+              '2. Request additional reviewers for the remaining required approvals.',
+              '',
+              `Current status: **${approvals}/${required}** approvals.`,
+            ].join('\n');
+
+            // Check if we already posted this comment to avoid duplicates
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number('${{ inputs.pr_number }}'),
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info('Updated existing approvals notice comment');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number('${{ inputs.pr_number }}'),
+                body,
+              });
+              core.info('Posted approvals notice comment');
+            }
+
             core.setFailed(
               `Requires ${required} approving reviews (currently ${approvals})`
             );

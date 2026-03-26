@@ -45,7 +45,7 @@ on:
         description: 'Max conversation turns'
         required: false
         type: number
-        default: 30
+        default: 50
       show_full_output:
         description: 'Show full JSON output from Claude Code. WARNING: may expose secrets in logs.'
         required: false
@@ -159,7 +159,7 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ inputs.pr_number }}
 
-            You are a senior staff engineer performing a rigorous code review.
+            You are performing a rigorous code review.
             This PR was authored by an AI agent — assume nothing and verify everything.
 
             ## Setup

@@ -123,6 +123,21 @@ jobs:
             }
 
             const pr = pulls[0];
+
+            // Only fix CI if the latest commit is from Claude
+            const { data: latestCommit } = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+            const author = latestCommit.author?.login || latestCommit.commit?.author?.name || '';
+            const isClaudeCommit = author === 'claude[bot]' || author.toLowerCase().includes('claude');
+            if (!isClaudeCommit) {
+              core.info(`PR #${pr.number}: latest commit by "${author}", not Claude — skipping`);
+              core.setOutput('should_fix', 'false');
+              return;
+            }
+
             const labels = pr.labels.map(l => l.name);
 
             if (labels.includes(`claude-fix-${maxAttempts}`)) {

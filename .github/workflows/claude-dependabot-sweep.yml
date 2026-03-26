@@ -38,7 +38,7 @@ on:
         description: 'Max conversation turns per package fix'
         required: false
         type: number
-        default: 30
+        default: 75
       show_full_output:
         description: 'Show full JSON output from Claude Code. WARNING: may expose secrets in logs.'
         required: false

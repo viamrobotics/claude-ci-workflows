@@ -50,7 +50,7 @@ on:
         description: 'Max conversation turns'
         required: false
         type: number
-        default: 30
+        default: 75
       max_fix_attempts:
         description: 'Maximum number of fix attempts before giving up'
         required: false

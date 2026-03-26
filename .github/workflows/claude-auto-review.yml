@@ -45,7 +45,7 @@ on:
         description: 'Max conversation turns'
         required: false
         type: number
-        default: 50
+        default: 75
       show_full_output:
         description: 'Show full JSON output from Claude Code. WARNING: may expose secrets in logs.'
         required: false

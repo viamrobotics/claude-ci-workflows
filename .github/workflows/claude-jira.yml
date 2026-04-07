@@ -262,7 +262,7 @@ jobs:
     container: ${{ inputs.container || '' }}
     steps:
       - name: Comment on Jira ticket that implementation is starting
-        if: inputs.jira_base_url != '' && inputs.jira_user_email != '' && secrets.JIRA_API_TOKEN != ''
+        if: inputs.jira_base_url != '' && inputs.jira_user_email != ''
         env:
           JIRA_BASE_URL: ${{ inputs.jira_base_url }}
           JIRA_USER_EMAIL: ${{ inputs.jira_user_email }}
@@ -270,6 +270,10 @@ jobs:
           TICKET_ID: ${{ inputs.ticket_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ -z "$JIRA_API_TOKEN" ]; then
+            echo "JIRA_API_TOKEN not set, skipping Jira comment"
+            exit 0
+          fi
           curl -sf -X POST \
             "$JIRA_BASE_URL/rest/api/3/issue/$TICKET_ID/comment" \
             -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \

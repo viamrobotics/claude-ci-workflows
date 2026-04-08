@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.1...v1.17.2) (2026-04-08)
+
+
+### Bug Fixes
+
+* bump claude-code-action to v1.0.90 and enable display_report ([#85](https://github.com/viamrobotics/claude-ci-workflows/issues/85)) ([923800f](https://github.com/viamrobotics/claude-ci-workflows/commit/923800f4b6e2ba992f476df21ac71b261de818a0))
+
 ## [1.17.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.0...v1.17.1) (2026-04-08)
 
 

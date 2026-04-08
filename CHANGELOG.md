@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.3](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.2...v1.17.3) (2026-04-08)
+
+
+### Bug Fixes
+
+* prevent dependabot sweep from promoting transitive deps to direct ([#87](https://github.com/viamrobotics/claude-ci-workflows/issues/87)) ([52ed2fb](https://github.com/viamrobotics/claude-ci-workflows/commit/52ed2fb780da78b1bedb95af2e40c4dcaf580b38))
+
 ## [1.17.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.1...v1.17.2) (2026-04-08)
 
 

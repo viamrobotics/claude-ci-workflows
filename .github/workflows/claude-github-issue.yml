@@ -155,7 +155,8 @@ jobs:
           EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
         run: .ci-prompts/scripts/assemble-system-prompt.sh
 
-      - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+      - id: claude
+        uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
         env:
           AUTH_TEST_CREDENTIALS: ${{ secrets.AUTH_TEST_CREDENTIALS }}
         with:
@@ -196,6 +197,37 @@ jobs:
             echo "Assigned $ISSUE_AUTHOR to PR #$PR_NUMBER"
           else
             echo "::warning::Could not find open PR referencing issue #$ISSUE_NUMBER to assign"
+          fi
+
+      - name: Comment result on issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$CLAUDE_OUTCOME" = "success" ]; then
+            # Look for a PR opened from the branch Claude created
+            PR_URL=""
+            if [ -n "$BRANCH_NAME" ]; then
+              PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url' 2>/dev/null || true)
+            fi
+
+            if [ -n "$PR_URL" ]; then
+              gh issue comment "$ISSUE_NUMBER" \
+                --repo "$GITHUB_REPOSITORY" \
+                --body "✅ Claude opened a PR for this issue: $PR_URL"
+            else
+              gh issue comment "$ISSUE_NUMBER" \
+                --repo "$GITHUB_REPOSITORY" \
+                --body "⚠️ Claude completed but did not open a PR. This may mean the issue requires manual intervention or Claude could not determine a code change. [View logs]($RUN_URL)"
+            fi
+          else
+            gh issue comment "$ISSUE_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "❌ Claude failed to implement this issue. [View logs]($RUN_URL)"
           fi
 
       - name: Notify Slack of failure

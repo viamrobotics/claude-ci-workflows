@@ -305,7 +305,8 @@ jobs:
           EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
         run: .ci-prompts/scripts/assemble-system-prompt.sh
 
-      - uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
+      - id: claude
+        uses: anthropics/claude-code-action@0cf5eeec4f908121edd03a81411b55485994f8d3 # v1.0.54
         env:
           AUTH_TEST_CREDENTIALS: ${{ secrets.AUTH_TEST_CREDENTIALS }}
         with:
@@ -345,6 +346,47 @@ jobs:
           else
             echo "::warning::Could not find open PR with ticket ID '$TICKET_ID' to assign"
           fi
+
+      - name: Comment result on Jira ticket
+        if: always() && inputs.jira_base_url != '' && inputs.jira_user_email != ''
+        env:
+          JIRA_BASE_URL: ${{ inputs.jira_base_url }}
+          JIRA_USER_EMAIL: ${{ inputs.jira_user_email }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          TICKET_ID: ${{ inputs.ticket_id }}
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$JIRA_API_TOKEN" ]; then
+            echo "JIRA_API_TOKEN not set, skipping Jira comment"
+            exit 0
+          fi
+
+          if [ "$CLAUDE_OUTCOME" = "success" ]; then
+            # Look for a PR opened from the branch Claude created
+            PR_URL=""
+            if [ -n "$BRANCH_NAME" ]; then
+              PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url' 2>/dev/null || true)
+            fi
+
+            if [ -n "$PR_URL" ]; then
+              MSG="✅ Claude opened a PR for this ticket: $PR_URL"
+            else
+              MSG="⚠️ Claude completed but did not open a PR. This may mean the ticket requires manual intervention or Claude could not determine a code change. View logs: $RUN_URL"
+            fi
+          else
+            MSG="❌ Claude failed to implement this ticket. View logs: $RUN_URL"
+          fi
+
+          # Post comment to Jira using Atlassian Document Format
+          ESCAPED_MSG=$(echo "$MSG" | jq -Rs '.')
+          curl -sf -X POST \
+            "$JIRA_BASE_URL/rest/api/3/issue/$TICKET_ID/comment" \
+            -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":${ESCAPED_MSG}}]}]}}"
 
       - name: Notify Slack of failure
         if: failure()

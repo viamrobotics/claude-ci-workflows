@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.16.0...v1.17.0) (2026-04-08)
+
+
+### Features
+
+* comment result on issue/ticket after Claude completes ([#81](https://github.com/viamrobotics/claude-ci-workflows/issues/81)) ([891efc1](https://github.com/viamrobotics/claude-ci-workflows/commit/891efc14c7699d74a581b6dac0ebd72268007785))
+
 ## [1.16.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.15.0...v1.16.0) (2026-04-07)
 
 

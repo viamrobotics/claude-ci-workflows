@@ -370,6 +370,10 @@ jobs:
             if [ -n "$BRANCH_NAME" ]; then
               PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url' 2>/dev/null || true)
             fi
+            # Fallback: search by ticket ID in PR title
+            if [ -z "$PR_URL" ]; then
+              PR_URL=$(gh pr list --state open --search "$TICKET_ID in:title" --json url --jq '.[0].url' 2>/dev/null || true)
+            fi
 
             if [ -n "$PR_URL" ]; then
               MSG="✅ Claude opened a PR for this ticket: $PR_URL"

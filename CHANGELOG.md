@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.0...v1.17.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* fall back to title search when branch_name output is empty ([#83](https://github.com/viamrobotics/claude-ci-workflows/issues/83)) ([3ab0fb1](https://github.com/viamrobotics/claude-ci-workflows/commit/3ab0fb1fd857ae0e1c21c53b9203f84fba922bb7))
+
 ## [1.17.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.16.0...v1.17.0) (2026-04-08)
 
 

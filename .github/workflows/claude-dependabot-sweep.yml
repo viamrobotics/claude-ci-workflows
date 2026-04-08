@@ -351,6 +351,25 @@ jobs:
             echo "- Implement the minimal change. No refactors or unnecessary additions."
             echo "- Follow existing patterns. No new conventions or abstractions."
             echo ""
+            echo "## Transitive Dependency Rules (CRITICAL)"
+            echo "- NEVER add a transitive dependency as a direct/explicit dependency in the manifest file (go.mod, package.json, etc.)."
+            echo "- If the vulnerable package is NOT already a direct dependency in the manifest, it is transitive — fix it by updating the PARENT dependency that pulls it in."
+            echo "- Use the advisory's patched_version to determine the MINIMUM parent version that pulls in the fix. Do NOT blindly update the parent to @latest — find the lowest version of the parent that depends on the patched transitive version."
+            echo "- To identify which direct dependency pulls in the vulnerable transitive package:"
+            echo "  - Go: run 'go mod graph | grep <vulnerable-package>'"
+            echo "  - npm: run 'npm ls <vulnerable-package>'"
+            echo "  - Python: run 'pip show <vulnerable-package>' or check pipdeptree"
+            echo "- For Go: update the parent with 'go get <parent-package>@<minimum-compatible-version>', then 'go mod tidy'. Do NOT run 'go get <transitive-package>' as that adds it to go.mod."
+            echo "- For npm: update the parent version in package.json to the minimum version that pulls in the patched transitive, then 'npm install'. Do NOT run 'npm install <transitive-package>'."
+            echo "- For Python: update the parent package version constraint in requirements.txt or pyproject.toml, then regenerate the lockfile."
+            echo "- After updating, verify the lockfile now contains a version of the vulnerable package that meets or exceeds the patched_version from the advisory."
+            echo "- Only update lockfiles (go.sum, package-lock.json, yarn.lock, etc.) — the manifest file should only change if a DIRECT dependency version is being bumped."
+            echo "- If no version of the parent dependency pulls in the patched transitive version, as a LAST RESORT you may add the transitive dependency directly to the manifest file. When doing so:"
+            echo "  - Add a comment on that line explaining WHY: which advisory (GHSA ID), which parent dependency couldn't resolve it, and that it should be removed once the parent catches up."
+            echo "  - Example (Go): '// SECURITY OVERRIDE: pinned for GHSA-xxxx-xxxx — <parent-pkg> does not yet depend on a patched version. Remove when <parent-pkg> updates its dependency.'"
+            echo "  - Example (npm package.json): add to the \"overrides\" or \"resolutions\" field with a comment in the PR body explaining the override."
+            echo "  - Flag this clearly in the PR description so reviewers know it needs future cleanup."
+            echo ""
             echo "## Git Commit Rules"
             echo "- Run git add and git commit as separate commands — never chain with &&."
             echo "- NEVER use HEREDOC or multi-line strings in git commit commands — write the message to /tmp/commit-msg.txt using the Write tool, then run: git commit --file /tmp/commit-msg.txt"
@@ -392,8 +411,15 @@ jobs:
 
             3. For each affected manifest path:
                a. Navigate to the directory containing the lockfile.
-               b. Run the appropriate update command for the ecosystem to update the package to the patched version.
-               c. If it fails due to a dependency conflict, investigate that specific constraint and find the best resolution.
+               b. First, check if `${{ matrix.package }}` is a DIRECT dependency (listed explicitly in go.mod, package.json, etc.) or a TRANSITIVE dependency (only in the lockfile, pulled in by another package).
+               c. If it is a DIRECT dependency: run the appropriate update command to bump it to the patched version.
+               d. If it is a TRANSITIVE dependency:
+                  - Identify which direct dependency pulls it in (e.g., `go mod graph | grep <pkg>`, `npm ls <pkg>`).
+                  - Use the `patched_version` from the advisory to find the minimum version of the parent that includes the fix — do NOT jump to @latest.
+                  - Update the parent to that minimum compatible version instead. NEVER add a transitive dependency to the manifest file.
+                  - If no parent version resolves the transitive vulnerability, as a last resort add the transitive dependency directly with a comment explaining why (advisory ID, which parent couldn't resolve it, when to remove it).
+               e. After updating, regenerate the lockfile (e.g., `go mod tidy`, `npm install`).
+               f. If the update fails due to a dependency conflict, investigate that specific constraint and find the best resolution — but still do NOT promote transitive dependencies to direct ones.
 
             4. After updating, run any available build/lint/typecheck commands to verify nothing is broken.
 

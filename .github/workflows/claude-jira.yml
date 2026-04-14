@@ -326,6 +326,7 @@ jobs:
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
             - Include the Jira ticket ID in the PR title.
+            - If after investigating you determine this SDK does not need changes for this ticket, write a short explanation to /tmp/no-changes-reason.txt and do NOT create a branch or PR.
             ${{ needs.resolve-inputs.outputs.github_user != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', needs.resolve-inputs.outputs.github_user) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
@@ -378,6 +379,9 @@ jobs:
 
             if [ -n "$PR_URL" ]; then
               MSG="✅ Claude opened a PR for this ticket: $PR_URL"
+            elif [ -f /tmp/no-changes-reason.txt ]; then
+              REASON=$(cat /tmp/no-changes-reason.txt)
+              MSG="ℹ️ Claude determined no changes are needed for this SDK. Reason: $REASON. View logs: $RUN_URL"
             else
               MSG="⚠️ Claude completed but did not open a PR. This may mean the ticket requires manual intervention or Claude could not determine a code change. View logs: $RUN_URL"
             fi

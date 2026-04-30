@@ -423,7 +423,12 @@ jobs:
 
             4. After updating, run any available build/lint/typecheck commands to verify nothing is broken.
 
-            5. Git workflow:
+            5. No-op guard — BEFORE any git branch/commit/push/PR commands:
+               - Run `git status --porcelain`. If the output is empty, there are no changes to commit.
+               - In that case, do NOT create a branch, do NOT commit, do NOT push, and do NOT open a PR.
+               - Instead, comment on issue #${{ matrix.issue_number }} explaining why no changes were needed (e.g., the package is already at or above the patched version transitively, or the advisory does not apply to how this repo uses the package), and stop.
+
+            6. Git workflow (only if step 5 found changes):
                a. Create a branch named `claude/dependabot-sweep-${{ matrix.branch_suffix }}`.
                b. Commit all changes with a clear message.
                c. Push the branch.
@@ -434,9 +439,9 @@ jobs:
                   - Any alerts that could NOT be resolved, with an explanation
                   - "Resolves #${{ matrix.issue_number }}"
 
-            6. If the package has no available fix (`patched_version` is "no fix available"):
+            7. If the package has no available fix (`patched_version` is "no fix available"):
                - Do NOT force-remove or break the dependency.
-               - Note it clearly in the PR description.
+               - Note it clearly in the PR description (if a PR is opened) or in the issue comment (if step 5 short-circuited).
                - Comment on issue #${{ matrix.issue_number }} explaining why it cannot be fixed.
             ${{ inputs.extra_prompt }}
           claude_args: |

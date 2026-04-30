@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.3...v1.18.0) (2026-04-14)
+
+
+### Features
+
+* comment on Jira when no SDK changes needed ([#89](https://github.com/viamrobotics/claude-ci-workflows/issues/89)) ([395cf70](https://github.com/viamrobotics/claude-ci-workflows/commit/395cf70a7e1beaea4059d9a0bd47e6f663a320fb))
+
 ## [1.17.3](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.2...v1.17.3) (2026-04-08)
 
 

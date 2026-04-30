@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.18.0...v1.18.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* skip PR creation when there are no changes to commit ([#91](https://github.com/viamrobotics/claude-ci-workflows/issues/91)) ([5924b0f](https://github.com/viamrobotics/claude-ci-workflows/commit/5924b0fa3d5223ecd932d080a919c4e96d4adea2))
+
 ## [1.18.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.17.3...v1.18.0) (2026-04-14)
 
 

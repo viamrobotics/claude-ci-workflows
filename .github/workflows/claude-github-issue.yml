@@ -176,6 +176,7 @@ jobs:
             - Read CLAUDE.md for repository conventions.
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
+            - Before creating a branch, committing, pushing, or opening a PR, run `git status --porcelain`. If the output is empty, do NOT create a branch or PR — comment on issue #${{ inputs.issue_number }} explaining why no changes were needed and stop.
             - Include the issue reference in the PR title (e.g., "feat: implement feature (#${{ inputs.issue_number }})").
             - In the PR description, link to the original issue with `Closes #${{ inputs.issue_number }}`.
             ${{ inputs.issue_author != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', inputs.issue_author) || '' }}

@@ -326,6 +326,7 @@ jobs:
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
             - Include the Jira ticket ID in the PR title.
+            - Before creating a branch, committing, pushing, or opening a PR, run `git status --porcelain`. If the output is empty, do NOT create a branch or PR — write a short explanation to /tmp/no-changes-reason.txt and stop.
             - If after investigating you determine this SDK does not need changes for this ticket, write a short explanation to /tmp/no-changes-reason.txt and do NOT create a branch or PR.
             ${{ needs.resolve-inputs.outputs.github_user != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', needs.resolve-inputs.outputs.github_user) || '' }}
             ${{ inputs.extra_prompt }}

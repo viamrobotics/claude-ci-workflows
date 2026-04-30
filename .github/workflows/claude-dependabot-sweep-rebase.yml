@@ -1,0 +1,208 @@
+name: Claude Dependabot Sweep Rebase (Reusable)
+
+# On-demand rebase of a Dependabot sweep PR. Triggered by an `@claude rebase`
+# comment on the PR. Mirrors the auto-rebase path that runs inside the sweep
+# workflow, but operates against a single PR.
+#
+# This file is the thin orchestrator: it validates the trigger, resolves PR
+# info, and delegates to claude-dependabot-sweep-rebase-job.yml.
+#
+# Callers handle the issue_comment trigger and pass configuration.
+
+on:
+  workflow_call:
+    inputs:
+      # --- Required ---
+      allowed_tools:
+        description: 'Allowed tools string for claude-code-action (Claude fallback only)'
+        required: true
+        type: string
+      # --- Optional ---
+      install_command:
+        description: 'Command to install dependencies before the Claude fallback runs (sets up Claude''s working environment)'
+        required: false
+        type: string
+        default: ''
+      extra_prompt:
+        description: 'Extra instructions appended to the Claude fallback user prompt'
+        required: false
+        type: string
+        default: ''
+      extra_system_prompt:
+        description: 'Extra instructions appended to the Claude fallback system prompt'
+        required: false
+        type: string
+        default: ''
+      model:
+        description: 'Claude model to use for the fallback'
+        required: false
+        type: string
+        default: 'claude-opus-4-6'
+      max_turns:
+        description: 'Max conversation turns for the Claude fallback'
+        required: false
+        type: number
+        default: 75
+      show_full_output:
+        description: 'Show full JSON output from Claude Code. WARNING: may expose secrets in logs.'
+        required: false
+        type: boolean
+        default: false
+      repository_owner:
+        description: 'Expected repository owner for guard condition'
+        required: false
+        type: string
+        default: 'viamrobotics'
+      branch_prefix:
+        description: 'Prefix used by the sweep workflow for PR branches'
+        required: false
+        type: string
+        default: 'claude/dependabot-sweep-'
+      trigger_phrase:
+        description: 'Comment phrase that triggers a rebase'
+        required: false
+        type: string
+        default: '@claude rebase'
+      container:
+        description: 'Container image for the rebase job. Leave empty for bare runner.'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      CI_GITHUB_APP_ID:
+        required: true
+      CI_GITHUB_APP_PRIVATE_KEY:
+        required: true
+      SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL:
+        required: false
+      AUTH_TEST_CREDENTIALS:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-pr:
+    if: >-
+      github.repository_owner == inputs.repository_owner &&
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, inputs.trigger_phrase)
+    permissions:
+      pull-requests: read
+      issues: write
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.pr.outputs.skip }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      head_ref: ${{ steps.pr.outputs.head_ref }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      issue_number: ${{ steps.pr.outputs.issue_number }}
+      package: ${{ steps.pr.outputs.package }}
+      severity: ${{ steps.pr.outputs.severity }}
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        # actions/create-github-app-token@v2.2.1
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf
+        with:
+          app-id: ${{ secrets.CI_GITHUB_APP_ID }}
+          private-key: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Resolve PR and validate trigger
+        id: pr
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const branchPrefix = `${{ inputs.branch_prefix }}`;
+            const prNumber = context.payload.issue.number;
+            const association = context.payload.comment.author_association;
+            const allowed = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            if (!allowed.includes(association)) {
+              core.setOutput('skip', 'true');
+              core.info(`Skipping: commenter author_association=${association} is not in ${allowed.join(',')}.`);
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (!pr.head.ref.startsWith(branchPrefix)) {
+              core.setOutput('skip', 'true');
+              core.info(`Skipping: PR head ${pr.head.ref} does not match prefix ${branchPrefix}.`);
+              return;
+            }
+
+            const body = pr.body || '';
+            const m = body.match(/Resolves #(\d+)/i);
+            if (!m) {
+              core.setFailed(`PR #${prNumber} body does not reference a linked issue ('Resolves #N').`);
+              return;
+            }
+            const issueNumber = m[1];
+
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(issueNumber, 10),
+            });
+
+            const titleMatch = (issue.title || '').match(/^fix\(deps\): update (\S+)/);
+            if (!titleMatch) {
+              core.setFailed(`Issue #${issueNumber} title does not match expected sweep format: ${issue.title}`);
+              return;
+            }
+            const pkg = titleMatch[1];
+
+            const severityMatch = (issue.title || '').match(/\((critical|high|medium|low)/i);
+            const severity = severityMatch ? severityMatch[1].toLowerCase() : 'unknown';
+
+            core.setOutput('skip', 'false');
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('issue_number', issueNumber);
+            core.setOutput('package', pkg);
+            core.setOutput('severity', severity);
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes',
+            });
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `Rebasing \`${pkg}\` against the default branch — [view workflow run](${runUrl}).`,
+            });
+
+  rebase:
+    needs: resolve-pr
+    if: needs.resolve-pr.outputs.skip != 'true'
+    uses: ./.github/workflows/claude-dependabot-sweep-rebase-job.yml
+    with:
+      package: ${{ needs.resolve-pr.outputs.package }}
+      severity: ${{ needs.resolve-pr.outputs.severity }}
+      issue_number: ${{ needs.resolve-pr.outputs.issue_number }}
+      pr_number: ${{ needs.resolve-pr.outputs.pr_number }}
+      head_ref: ${{ needs.resolve-pr.outputs.head_ref }}
+      head_sha: ${{ needs.resolve-pr.outputs.head_sha }}
+      install_command: ${{ inputs.install_command }}
+      extra_prompt: ${{ inputs.extra_prompt }}
+      extra_system_prompt: ${{ inputs.extra_system_prompt }}
+      model: ${{ inputs.model }}
+      max_turns: ${{ inputs.max_turns }}
+      show_full_output: ${{ inputs.show_full_output }}
+      allowed_tools: ${{ inputs.allowed_tools }}
+      container: ${{ inputs.container }}
+    secrets: inherit

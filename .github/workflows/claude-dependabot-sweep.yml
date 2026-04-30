@@ -81,7 +81,8 @@ jobs:
       issues: write
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.create-issues.outputs.matrix }}
+      fix_matrix: ${{ steps.create-issues.outputs.fix_matrix }}
+      rebase_matrix: ${{ steps.create-issues.outputs.rebase_matrix }}
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -184,11 +185,13 @@ jobs:
         run: |
           PKG_COUNT=$(jq 'length' /tmp/per-package.json)
           if [ "$PKG_COUNT" -eq 0 ]; then
-            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo 'fix_matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo 'rebase_matrix={"include":[]}' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          MATRIX_ENTRIES="[]"
+          FIX_ENTRIES="[]"
+          REBASE_ENTRIES="[]"
 
           for i in $(seq 0 $((PKG_COUNT - 1))); do
             PKG=$(jq -r ".[$i].package" /tmp/per-package.json)
@@ -208,16 +211,29 @@ jobs:
               --json number \
               --jq '.[0].number // empty' 2>/dev/null || true)
 
-            # Check if an open PR already exists for this package
-            EXISTING_PR=$(gh pr list \
+            # Check if an open PR already exists for this package; if it has
+            # merge conflicts, we'll route it through the rebase matrix instead
+            # of skipping.
+            EXISTING_PR_JSON=$(gh pr list \
               --repo "$GH_REPO" \
               --head "claude/dependabot-sweep-${BRANCH_SUFFIX}" \
               --state open \
-              --json number \
-              --jq '.[0].number // empty' 2>/dev/null || true)
+              --json number,mergeable,headRefName,headRefOid \
+              --jq '.[0]' 2>/dev/null || true)
 
-            if [ -n "$EXISTING_PR" ]; then
-              echo "Skipping ${PKG}: open PR #${EXISTING_PR} already exists."
+            EXISTING_PR=""
+            PR_MERGEABLE=""
+            PR_HEAD_REF=""
+            PR_HEAD_SHA=""
+            if [ -n "$EXISTING_PR_JSON" ] && [ "$EXISTING_PR_JSON" != "null" ]; then
+              EXISTING_PR=$(echo "$EXISTING_PR_JSON" | jq -r '.number')
+              PR_MERGEABLE=$(echo "$EXISTING_PR_JSON" | jq -r '.mergeable')
+              PR_HEAD_REF=$(echo "$EXISTING_PR_JSON" | jq -r '.headRefName')
+              PR_HEAD_SHA=$(echo "$EXISTING_PR_JSON" | jq -r '.headRefOid')
+            fi
+
+            if [ -n "$EXISTING_PR" ] && [ "$PR_MERGEABLE" != "CONFLICTING" ]; then
+              echo "Skipping ${PKG}: open PR #${EXISTING_PR} (mergeable=${PR_MERGEABLE})."
               continue
             fi
 
@@ -268,21 +284,37 @@ jobs:
               echo "Created issue #${ISSUE_NUMBER} for ${PKG}"
             fi
 
-            MATRIX_ENTRIES=$(echo "$MATRIX_ENTRIES" | jq \
-              --arg pkg "$PKG" \
-              --arg issue "$ISSUE_NUMBER" \
-              --arg severity "$SEVERITY" \
-              --arg branch "$BRANCH_SUFFIX" \
-              '. + [{"package": $pkg, "issue_number": $issue, "severity": $severity, "branch_suffix": $branch}]')
+            if [ "$PR_MERGEABLE" = "CONFLICTING" ]; then
+              echo "PR #${EXISTING_PR} for ${PKG} has conflicts; routing to rebase matrix."
+              REBASE_ENTRIES=$(echo "$REBASE_ENTRIES" | jq \
+                --arg pkg "$PKG" \
+                --arg issue "$ISSUE_NUMBER" \
+                --arg severity "$SEVERITY" \
+                --arg branch "$BRANCH_SUFFIX" \
+                --arg pr "$EXISTING_PR" \
+                --arg head_ref "$PR_HEAD_REF" \
+                --arg head_sha "$PR_HEAD_SHA" \
+                '. + [{"package": $pkg, "issue_number": $issue, "severity": $severity, "branch_suffix": $branch, "pr_number": $pr, "head_ref": $head_ref, "head_sha": $head_sha}]')
+            else
+              FIX_ENTRIES=$(echo "$FIX_ENTRIES" | jq \
+                --arg pkg "$PKG" \
+                --arg issue "$ISSUE_NUMBER" \
+                --arg severity "$SEVERITY" \
+                --arg branch "$BRANCH_SUFFIX" \
+                '. + [{"package": $pkg, "issue_number": $issue, "severity": $severity, "branch_suffix": $branch}]')
+            fi
           done
 
-          MATRIX=$(echo "$MATRIX_ENTRIES" | jq -c '{include: .}')
-          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
-          echo "Matrix: ${MATRIX}"
+          FIX_MATRIX=$(echo "$FIX_ENTRIES" | jq -c '{include: .}')
+          REBASE_MATRIX=$(echo "$REBASE_ENTRIES" | jq -c '{include: .}')
+          echo "fix_matrix=${FIX_MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "rebase_matrix=${REBASE_MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "Fix matrix: ${FIX_MATRIX}"
+          echo "Rebase matrix: ${REBASE_MATRIX}"
 
   fix-dependencies:
     needs: collect-alerts
-    if: needs.collect-alerts.outputs.matrix != '{"include":[]}' && needs.collect-alerts.outputs.matrix != ''
+    if: needs.collect-alerts.outputs.fix_matrix != '{"include":[]}' && needs.collect-alerts.outputs.fix_matrix != ''
     permissions:
       contents: write
       pull-requests: write
@@ -291,7 +323,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ${{ inputs.container || '' }}
     strategy:
-      matrix: ${{ fromJSON(needs.collect-alerts.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.collect-alerts.outputs.fix_matrix) }}
       fail-fast: false
     steps:
       - name: Generate GitHub App token
@@ -512,3 +544,32 @@ jobs:
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
+
+
+  # Auto-rebase: any sweep PR that develops merge conflicts is delegated to
+  # the rebase-job reusable, which replays the original manifest patch onto
+  # the default branch (deterministic) and falls back to Claude only if the
+  # manifest itself moved.
+  rebase-dependencies:
+    needs: collect-alerts
+    if: needs.collect-alerts.outputs.rebase_matrix != '{"include":[]}' && needs.collect-alerts.outputs.rebase_matrix != ''
+    strategy:
+      matrix: ${{ fromJSON(needs.collect-alerts.outputs.rebase_matrix) }}
+      fail-fast: false
+    uses: ./.github/workflows/claude-dependabot-sweep-rebase-job.yml
+    with:
+      package: ${{ matrix.package }}
+      severity: ${{ matrix.severity }}
+      issue_number: ${{ matrix.issue_number }}
+      pr_number: ${{ matrix.pr_number }}
+      head_ref: ${{ matrix.head_ref }}
+      head_sha: ${{ matrix.head_sha }}
+      install_command: ${{ inputs.install_command }}
+      extra_prompt: ${{ inputs.extra_prompt }}
+      extra_system_prompt: ${{ inputs.extra_system_prompt }}
+      model: ${{ inputs.model }}
+      max_turns: ${{ inputs.max_turns }}
+      show_full_output: ${{ inputs.show_full_output }}
+      allowed_tools: ${{ inputs.allowed_tools }}
+      container: ${{ inputs.container }}
+    secrets: inherit

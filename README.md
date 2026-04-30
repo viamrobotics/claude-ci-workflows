@@ -11,7 +11,8 @@ Reusable GitHub Actions workflows for Claude-powered CI/CD automation. These wor
 | `claude-auto-review.yml` | Auto-review PRs after CI passes on `claude/*` branches (can push fixes) |
 | `claude-on-demand-review.yml` | Read-only review triggered by `@claude` mention in PR comments |
 | `claude-pr-fix.yml` | Fix a PR when triggered by `@claude-fix` mention in PR comments (pushes code) |
-| `claude-dependabot-sweep.yml` | Consolidate Dependabot alerts into one issue, Claude creates one PR fixing all |
+| `claude-dependabot-sweep.yml` | Consolidate Dependabot alerts into one issue, Claude creates one PR fixing all. Auto-rebases sweep PRs that develop merge conflicts. |
+| `claude-dependabot-sweep-rebase.yml` | On-demand rebase of a sweep PR via `@claude rebase` comment. Same logic as the auto-rebase path. |
 
 ## Architecture
 
@@ -23,6 +24,8 @@ claude-ci-workflows/.github/workflows/   <-- Reusable workflow_call workflows (t
   claude-on-demand-review.yml
   claude-pr-fix.yml
   claude-dependabot-sweep.yml
+  claude-dependabot-sweep-rebase.yml
+  claude-dependabot-sweep-rebase-job.yml  (internal — called by the two above)
 
 <your-repo>/.github/workflows/           <-- Thin caller workflows (per repo)
   claude-ci-fix.yml       -> calls claude-ci-fix.yml
@@ -30,6 +33,7 @@ claude-ci-workflows/.github/workflows/   <-- Reusable workflow_call workflows (t
   claude-review.yml       -> calls claude-auto-review.yml + claude-on-demand-review.yml
   claude-pr-fix.yml       -> calls claude-pr-fix.yml
   claude-dependabot-sweep.yml -> calls claude-dependabot-sweep.yml
+  claude-dependabot-sweep-rebase.yml -> calls claude-dependabot-sweep-rebase.yml
 ```
 
 Caller workflows handle **triggers** (e.g., `workflow_run`, `repository_dispatch`, `issue_comment`) and pass **repo-specific configuration** as inputs:
@@ -73,7 +77,14 @@ Jira ticket dispatched (repository_dispatch or manual)
 Scheduled cron / manual dispatch
   --> claude-dependabot-sweep.yml
        (fetch alerts -> group by package -> one issue per package -> Claude fixes each -> one draft PR per package)
+       (also: any open sweep PR with merge conflicts -> deterministic patch replay onto main, Claude only as fallback)
+
+@claude rebase mention on a sweep PR
+  --> claude-dependabot-sweep-rebase.yml
+       (same logic as the auto-rebase path, on a single PR, on demand)
 ```
+
+**Rebase strategy.** Both auto-rebase and on-demand rebase try a deterministic path first: extract the original PR's manifest-only diff (excluding lockfiles), apply it onto current `main`, then run `install_command` to regenerate lockfiles. Claude is only invoked when the manifest itself moved on `main` (the patch can't apply cleanly) — that path uses the same prompt shape as the initial sweep fix.
 
 ## Reusable workflow inputs
 
@@ -249,3 +260,44 @@ jobs:
       GIT_ACCESS_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
       SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
 ```
+
+### Dependabot sweep rebase caller (on-demand `@claude rebase`)
+
+The auto-rebase path runs as part of the scheduled sweep above (no extra wiring needed). This caller adds an on-demand trigger so a maintainer can comment `@claude rebase` on any sweep PR and re-rebase it immediately without waiting for the next scheduled run.
+
+```yaml
+name: Claude Dependabot Sweep Rebase
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  rebase:
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude rebase')
+    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep-rebase.yml@main
+    with:
+      install_command: npm ci   # used to set up the env when falling back to Claude
+      allowed_tools: 'Edit,Read,Write,Glob,Grep,Bash(npm install*),Bash(npm update*),Bash(npm run build*),Bash(npm run lint*),Bash(npm run test*)'
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CI_GITHUB_APP_ID: ${{ secrets.CI_GITHUB_APP_ID }}
+      CI_GITHUB_APP_PRIVATE_KEY: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
+      SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
+```
+
+The deterministic path regenerates lockfiles automatically based on the lockfile basenames touched by the original PR. Each command runs in the affected lockfile's directory (monorepo-aware):
+
+| Lockfile | Regen command |
+|----------|---------------|
+| `go.sum` | `go mod tidy` |
+| `package-lock.json` / `npm-shrinkwrap.json` | `npm install --package-lock-only` |
+| `pnpm-lock.yaml` | `pnpm install --lockfile-only` |
+| `pubspec.lock` | `flutter pub get` |
+| `Cargo.lock` | `cargo generate-lockfile` |
+| `uv.lock` | `uv lock` |
+| `poetry.lock` | `poetry lock --no-update` |
+
+Other recognized lockfiles (`yarn.lock`, `bun.lockb`, `Pipfile.lock`, `Gemfile.lock`, `composer.lock`, `mix.lock`) and unknown ones trigger the Claude fallback. `install_command` is only used to set up Claude's working environment for that fallback path — typically `npm ci`, `pip install -e .`, `make install`, `go mod download`.

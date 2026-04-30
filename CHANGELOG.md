@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.19.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.18.1...v1.19.0) (2026-04-30)
+
+
+### Features
+
+* auto-rebase dependabot sweep PRs with merge conflicts ([#93](https://github.com/viamrobotics/claude-ci-workflows/issues/93)) ([81a8d93](https://github.com/viamrobotics/claude-ci-workflows/commit/81a8d93e71cefc6694f8ca8119b7a541080961b7))
+
 ## [1.18.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.18.0...v1.18.1) (2026-04-30)
 
 

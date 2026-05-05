@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.19.0...v2.0.0) (2026-05-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove claude-auto-review workflow ([#95](https://github.com/viamrobotics/claude-ci-workflows/issues/95))
+
+### Features
+
+* remove claude-auto-review workflow ([#95](https://github.com/viamrobotics/claude-ci-workflows/issues/95)) ([c64219d](https://github.com/viamrobotics/claude-ci-workflows/commit/c64219d7a5d5791a61b67f73cd1fe28443e86082))
+
 ## [1.19.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.18.1...v1.19.0) (2026-04-30)
 
 

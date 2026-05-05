@@ -342,7 +342,10 @@ jobs:
           GITHUB_USER: ${{ needs.resolve-inputs.outputs.github_user }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          PR_NUMBER=$(gh pr list --state open --search "$TICKET_ID in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+          # Use REST list (consistent) and filter client-side; the search index lags
+          # 30-90s for newly-created PRs.
+          PR_NUMBER=$(gh pr list --state open --limit 50 --json number,title \
+            --jq "[.[] | select(.title | startswith(\"$TICKET_ID\"))] | .[0].number // empty" 2>/dev/null || true)
           if [ -n "$PR_NUMBER" ]; then
             gh pr edit "$PR_NUMBER" --add-assignee "$GITHUB_USER"
             echo "Assigned $GITHUB_USER to PR #$PR_NUMBER"
@@ -373,9 +376,11 @@ jobs:
             if [ -n "$BRANCH_NAME" ]; then
               PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url' 2>/dev/null || true)
             fi
-            # Fallback: search by ticket ID in PR title
+            # Fallback: list open PRs (REST, consistent) and filter by ticket ID prefix.
+            # Avoid `--search`, which lags 30-90s for newly-created PRs.
             if [ -z "$PR_URL" ]; then
-              PR_URL=$(gh pr list --state open --search "$TICKET_ID in:title" --json url --jq '.[0].url' 2>/dev/null || true)
+              PR_URL=$(gh pr list --state open --limit 50 --json url,title \
+                --jq "[.[] | select(.title | startswith(\"$TICKET_ID\"))] | .[0].url // empty" 2>/dev/null || true)
             fi
 
             if [ -n "$PR_URL" ]; then

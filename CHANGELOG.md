@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.0...v2.0.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* **jira:** avoid search-index race when locating opened PR ([#97](https://github.com/viamrobotics/claude-ci-workflows/issues/97)) ([a7286e2](https://github.com/viamrobotics/claude-ci-workflows/commit/a7286e21e8ee69fe8bf4febb7c217c5b67b6a7ab))
+
 ## [2.0.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v1.19.0...v2.0.0) (2026-05-05)
 
 

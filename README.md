@@ -8,7 +8,6 @@ Reusable GitHub Actions workflows for Claude-powered CI/CD automation. These wor
 |----------|---------|
 | `claude-ci-fix.yml` | Auto-fix CI failures on `claude/*` branch PRs (label-based retry, configurable max attempts) |
 | `claude-jira.yml` | Implement Jira tickets via Claude, create PR on `claude/*` branch |
-| `claude-auto-review.yml` | Auto-review PRs after CI passes on `claude/*` branches (can push fixes) |
 | `claude-on-demand-review.yml` | Read-only review triggered by `@claude` mention in PR comments |
 | `claude-pr-fix.yml` | Fix a PR when triggered by `@claude-fix` mention in PR comments (pushes code) |
 | `claude-dependabot-sweep.yml` | Consolidate Dependabot alerts into one issue, Claude creates one PR fixing all. Auto-rebases sweep PRs that develop merge conflicts. |
@@ -20,7 +19,6 @@ Reusable GitHub Actions workflows for Claude-powered CI/CD automation. These wor
 claude-ci-workflows/.github/workflows/   <-- Reusable workflow_call workflows (this repo)
   claude-ci-fix.yml
   claude-jira.yml
-  claude-auto-review.yml
   claude-on-demand-review.yml
   claude-pr-fix.yml
   claude-dependabot-sweep.yml
@@ -30,7 +28,7 @@ claude-ci-workflows/.github/workflows/   <-- Reusable workflow_call workflows (t
 <your-repo>/.github/workflows/           <-- Thin caller workflows (per repo)
   claude-ci-fix.yml       -> calls claude-ci-fix.yml
   claude-jira.yml         -> calls claude-jira.yml
-  claude-review.yml       -> calls claude-auto-review.yml + claude-on-demand-review.yml
+  claude-review.yml       -> calls claude-on-demand-review.yml
   claude-pr-fix.yml       -> calls claude-pr-fix.yml
   claude-dependabot-sweep.yml -> calls claude-dependabot-sweep.yml
   claude-dependabot-sweep-rebase.yml -> calls claude-dependabot-sweep-rebase.yml
@@ -62,8 +60,6 @@ PR opened on claude/* branch
   --> Repo CI runs
        |
        +--> [CI fails]  --> claude-ci-fix.yml (auto-fix, configurable retries)
-       |
-       +--> [CI passes] --> claude-auto-review.yml (auto-review, can push fixes)
 
 @claude mention in PR comment
   --> claude-on-demand-review.yml (read-only review)
@@ -120,15 +116,6 @@ Scheduled cron / manual dispatch
 | `max_fix_attempts` | number | no | `2` | Max fix attempts before giving up |
 | `team_mention` | string | yes | - | GitHub team to @mention when retries exhausted |
 
-### auto-review specific inputs
-
-| Input | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `pr_number` | string | yes | - | PR number to review |
-| `pr_title` | string | yes | - | PR title |
-| `branch` | string | yes | - | PR branch name |
-| `extra_review_instructions` | string | no | `''` | Additional review instructions |
-
 ### on-demand-review specific inputs
 
 | Input | Type | Required | Default | Description |
@@ -150,8 +137,8 @@ No additional required inputs beyond [common inputs](#common-inputs-all-workflow
 | Secret | Used by | Required | Description |
 |--------|---------|----------|-------------|
 | `ANTHROPIC_API_KEY` | all | yes | Set at viamrobotics org level. Key `claude_code_key_jira_github_action` in the Internal Usage Workspace on Claude Console. |
-| `GIT_ACCESS_TOKEN` | ci-fix, auto-review, pr-fix, dependabot-sweep | yes | PAT with repo write access for pushing fixes to branches. Must include `security_events` scope for dependabot-sweep. |
-| `SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL` | jira, auto-review, dependabot-sweep | no | Set at viamrobotics org level; alerts to `#ai-workflows-alerts`. Override at the repo level to send to a different Slack channel. |
+| `GIT_ACCESS_TOKEN` | ci-fix, pr-fix, dependabot-sweep | yes | PAT with repo write access for pushing fixes to branches. Must include `security_events` scope for dependabot-sweep. |
+| `SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL` | jira, dependabot-sweep | no | Set at viamrobotics org level; alerts to `#ai-workflows-alerts`. Override at the repo level to send to a different Slack channel. |
 
 ## Caller examples
 

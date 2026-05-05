@@ -73,8 +73,7 @@ permissions:
 
 jobs:
   resolve-context:
-    # Always skip bot-authored reviews to prevent infinite loops between
-    # auto-review and this workflow.
+    # Skip bot-authored reviews to prevent loops if another bot triggers this workflow.
     if: >-
       github.repository_owner == inputs.repository_owner &&
       (

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.1...v2.0.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* switch nested rebase-job uses: to absolute reference ([#99](https://github.com/viamrobotics/claude-ci-workflows/issues/99)) ([52bf458](https://github.com/viamrobotics/claude-ci-workflows/commit/52bf4583feb7da55c1e052fad1aa2029eb75e0c4))
+
 ## [2.0.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.0...v2.0.1) (2026-05-05)
 
 

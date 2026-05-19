@@ -556,7 +556,7 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.collect-alerts.outputs.rebase_matrix) }}
       fail-fast: false
-    uses: ./.github/workflows/claude-dependabot-sweep-rebase-job.yml
+    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep-rebase-job.yml@main
     with:
       package: ${{ matrix.package }}
       severity: ${{ matrix.severity }}

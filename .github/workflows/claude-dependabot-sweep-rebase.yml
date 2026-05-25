@@ -189,7 +189,7 @@ jobs:
   rebase:
     needs: resolve-pr
     if: needs.resolve-pr.outputs.skip != 'true'
-    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep-rebase-job.yml@main
+    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep-rebase-job.yml@f2dcfab85088e13a9d1a0b6924b321784e943f40 # v2.0.2
     with:
       package: ${{ needs.resolve-pr.outputs.package }}
       severity: ${{ needs.resolve-pr.outputs.severity }}

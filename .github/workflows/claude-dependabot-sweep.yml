@@ -83,6 +83,11 @@ jobs:
     outputs:
       fix_matrix: ${{ steps.create-issues.outputs.fix_matrix }}
       rebase_matrix: ${{ steps.create-issues.outputs.rebase_matrix }}
+      # 'true' only when there is at least one PR to rebase. Reusable-workflow
+      # matrices reject an empty include[] *before* the job-level if: gate is
+      # evaluated, so we gate rebase-dependencies on this boolean and emit a
+      # single-entry sentinel rebase_matrix in the no-rebase case (see below).
+      has_rebases: ${{ steps.create-issues.outputs.has_rebases }}
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -183,10 +188,17 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # Sentinel single-entry matrix for the no-rebase case. The job is
+          # gated by has_rebases, so this entry is never actually consumed —
+          # it only exists to satisfy GitHub's "matrix must define at least
+          # one vector" validation for reusable-workflow matrix jobs.
+          REBASE_SENTINEL='{"include":[{"package":"_noop","severity":"none","issue_number":"0","pr_number":"0","head_ref":"_noop","head_sha":"0000000000000000000000000000000000000000"}]}'
+
           PKG_COUNT=$(jq 'length' /tmp/per-package.json)
           if [ "$PKG_COUNT" -eq 0 ]; then
             echo 'fix_matrix={"include":[]}' >> "$GITHUB_OUTPUT"
-            echo 'rebase_matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo "rebase_matrix=${REBASE_SENTINEL}" >> "$GITHUB_OUTPUT"
+            echo 'has_rebases=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -306,11 +318,22 @@ jobs:
           done
 
           FIX_MATRIX=$(echo "$FIX_ENTRIES" | jq -c '{include: .}')
-          REBASE_MATRIX=$(echo "$REBASE_ENTRIES" | jq -c '{include: .}')
+          # Substitute the sentinel matrix when there are no real rebase
+          # entries (see REBASE_SENTINEL above) and record has_rebases.
+          REBASE_COUNT=$(echo "$REBASE_ENTRIES" | jq 'length')
+          if [ "$REBASE_COUNT" -eq 0 ]; then
+            REBASE_MATRIX="$REBASE_SENTINEL"
+            HAS_REBASES=false
+          else
+            REBASE_MATRIX=$(echo "$REBASE_ENTRIES" | jq -c '{include: .}')
+            HAS_REBASES=true
+          fi
           echo "fix_matrix=${FIX_MATRIX}" >> "$GITHUB_OUTPUT"
           echo "rebase_matrix=${REBASE_MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "has_rebases=${HAS_REBASES}" >> "$GITHUB_OUTPUT"
           echo "Fix matrix: ${FIX_MATRIX}"
           echo "Rebase matrix: ${REBASE_MATRIX}"
+          echo "Has rebases: ${HAS_REBASES}"
 
   fix-dependencies:
     needs: collect-alerts
@@ -552,11 +575,15 @@ jobs:
   # manifest itself moved.
   rebase-dependencies:
     needs: collect-alerts
-    if: needs.collect-alerts.outputs.rebase_matrix != '{"include":[]}' && needs.collect-alerts.outputs.rebase_matrix != ''
+    # Gate on has_rebases (not rebase_matrix) because GitHub validates the
+    # matrix expression on reusable-workflow jobs BEFORE evaluating if:,
+    # and an empty include[] is rejected at startup. collect-alerts emits a
+    # sentinel single-entry rebase_matrix when there's nothing to rebase.
+    if: needs.collect-alerts.outputs.has_rebases == 'true'
     strategy:
       matrix: ${{ fromJSON(needs.collect-alerts.outputs.rebase_matrix) }}
       fail-fast: false
-    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep-rebase-job.yml@main
+    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep-rebase-job.yml@f2dcfab85088e13a9d1a0b6924b321784e943f40 # v2.0.2
     with:
       package: ${{ matrix.package }}
       severity: ${{ matrix.severity }}

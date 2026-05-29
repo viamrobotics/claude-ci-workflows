@@ -89,6 +89,7 @@ jobs:
     if: github.repository_owner == inputs.repository_owner
     permissions:
       actions: read
+      contents: read
       issues: write
       pull-requests: write
     runs-on: ubuntu-latest

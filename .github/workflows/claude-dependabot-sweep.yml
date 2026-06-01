@@ -196,9 +196,11 @@ jobs:
 
           PKG_COUNT=$(jq 'length' /tmp/per-package.json)
           if [ "$PKG_COUNT" -eq 0 ]; then
-            echo 'fix_matrix={"include":[]}' >> "$GITHUB_OUTPUT"
-            echo "rebase_matrix=${REBASE_SENTINEL}" >> "$GITHUB_OUTPUT"
-            echo 'has_rebases=false' >> "$GITHUB_OUTPUT"
+            {
+              echo 'fix_matrix={"include":[]}'
+              echo "rebase_matrix=${REBASE_SENTINEL}"
+              echo 'has_rebases=false'
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -328,9 +330,11 @@ jobs:
             REBASE_MATRIX=$(echo "$REBASE_ENTRIES" | jq -c '{include: .}')
             HAS_REBASES=true
           fi
-          echo "fix_matrix=${FIX_MATRIX}" >> "$GITHUB_OUTPUT"
-          echo "rebase_matrix=${REBASE_MATRIX}" >> "$GITHUB_OUTPUT"
-          echo "has_rebases=${HAS_REBASES}" >> "$GITHUB_OUTPUT"
+          {
+            echo "fix_matrix=${FIX_MATRIX}"
+            echo "rebase_matrix=${REBASE_MATRIX}"
+            echo "has_rebases=${HAS_REBASES}"
+          } >> "$GITHUB_OUTPUT"
           echo "Fix matrix: ${FIX_MATRIX}"
           echo "Rebase matrix: ${REBASE_MATRIX}"
           echo "Has rebases: ${HAS_REBASES}"

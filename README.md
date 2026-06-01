@@ -21,9 +21,11 @@ claude-ci-workflows/.github/workflows/   <-- Reusable workflow_call workflows (t
   claude-jira.yml
   claude-on-demand-review.yml
   claude-pr-fix.yml
-  claude-dependabot-sweep.yml
-  claude-dependabot-sweep-rebase.yml
-  claude-dependabot-sweep-rebase-job.yml  (internal — called by the two above)
+  claude-dependabot-sweep.yml             (auto-rebase runs the composite action below from a matrix job)
+  claude-dependabot-sweep-rebase.yml      (on-demand path)
+  claude-dependabot-sweep-rebase-job.yml  (internal — wraps the composite action for the on-demand path)
+.github/actions/
+  dependabot-sweep-rebase/                (composite action — shared single-PR rebase logic)
 
 <your-repo>/.github/workflows/           <-- Thin caller workflows (per repo)
   claude-ci-fix.yml       -> calls claude-ci-fix.yml

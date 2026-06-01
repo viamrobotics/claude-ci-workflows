@@ -344,8 +344,9 @@ jobs:
         run: |
           # Use REST list (consistent) and filter client-side; the search index lags
           # 30-90s for newly-created PRs.
+          # Titles may be bare ("APP-123 ...") or bracketed ("[APP-123] ..."), so match both.
           PR_NUMBER=$(gh pr list --state open --limit 50 --json number,title \
-            --jq "[.[] | select(.title | startswith(\"$TICKET_ID\"))] | .[0].number // empty" 2>/dev/null || true)
+            --jq "[.[] | select((.title | startswith(\"$TICKET_ID\")) or (.title | startswith(\"[$TICKET_ID]\")))] | .[0].number // empty" 2>/dev/null || true)
           if [ -n "$PR_NUMBER" ]; then
             gh pr edit "$PR_NUMBER" --add-assignee "$GITHUB_USER"
             echo "Assigned $GITHUB_USER to PR #$PR_NUMBER"
@@ -378,9 +379,10 @@ jobs:
             fi
             # Fallback: list open PRs (REST, consistent) and filter by ticket ID prefix.
             # Avoid `--search`, which lags 30-90s for newly-created PRs.
+            # Titles may be bare ("APP-123 ...") or bracketed ("[APP-123] ..."), so match both.
             if [ -z "$PR_URL" ]; then
               PR_URL=$(gh pr list --state open --limit 50 --json url,title \
-                --jq "[.[] | select(.title | startswith(\"$TICKET_ID\"))] | .[0].url // empty" 2>/dev/null || true)
+                --jq "[.[] | select((.title | startswith(\"$TICKET_ID\")) or (.title | startswith(\"[$TICKET_ID]\")))] | .[0].url // empty" 2>/dev/null || true)
             fi
 
             if [ -n "$PR_URL" ]; then

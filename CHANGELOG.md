@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.4](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.3...v2.0.4) (2026-06-02)
+
+
+### Bug Fixes
+
+* match bracketed ticket prefix in Jira PR detection ([#104](https://github.com/viamrobotics/claude-ci-workflows/issues/104)) ([f294953](https://github.com/viamrobotics/claude-ci-workflows/commit/f29495383550d2d47fb73b612b359b1fba2d25d1))
+
 ## [2.0.3](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.2...v2.0.3) (2026-05-29)
 
 

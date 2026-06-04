@@ -335,24 +335,80 @@ jobs:
             --max-turns ${{ needs.resolve-inputs.outputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 
-      - name: Assign responsible engineer to PR
-        if: needs.resolve-inputs.outputs.github_user != ''
+      # Keep the execution log so "no PR" outcomes are debuggable after teardown.
+      - name: Upload Claude execution output
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: claude-execution-output
+          # Use the action's output path; fall back to the temp location
+          # (container-safe). A blank line is skipped if the output is empty.
+          path: |
+            ${{ steps.claude.outputs.execution_file }}
+            ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      # Resolve the PR once and classify the outcome; the assign, Jira-comment,
+      # and flag steps below all read these outputs. always() so it also runs
+      # after a Claude failure.
+      - name: Classify outcome
+        id: classify
+        if: always()
         env:
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
           TICKET_ID: ${{ inputs.ticket_id }}
-          GITHUB_USER: ${{ needs.resolve-inputs.outputs.github_user }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Use REST list (consistent) and filter client-side; the search index lags
-          # 30-90s for newly-created PRs.
-          # Titles may be bare ("APP-123 ...") or bracketed ("[APP-123] ..."), so match both.
-          PR_NUMBER=$(gh pr list --state open --limit 50 --json number,title \
-            --jq "[.[] | select((.title | startswith(\"$TICKET_ID\")) or (.title | startswith(\"[$TICKET_ID]\")))] | .[0].number // empty" 2>/dev/null || true)
-          if [ -n "$PR_NUMBER" ]; then
-            gh pr edit "$PR_NUMBER" --add-assignee "$GITHUB_USER"
-            echo "Assigned $GITHUB_USER to PR #$PR_NUMBER"
-          else
-            echo "::warning::Could not find open PR with ticket ID '$TICKET_ID' to assign"
+          # Find the PR by branch, then by ticket-ID title prefix (bare or
+          # bracketed). REST list, not --search: the index lags 30-90s on new PRs.
+          PR_JSON=""
+          if [ "$CLAUDE_OUTCOME" = "success" ]; then
+            if [ -n "$BRANCH_NAME" ]; then
+              PR_JSON=$(gh pr list --state open --head "$BRANCH_NAME" --json number,url \
+                --jq '.[0] // empty' 2>/dev/null || true)
+            fi
+            if [ -z "$PR_JSON" ]; then
+              PR_JSON=$(gh pr list --state open --limit 50 --json number,url,title \
+                --jq "[.[] | select((.title | startswith(\"$TICKET_ID\")) or (.title | startswith(\"[$TICKET_ID]\")))] | .[0] // empty" 2>/dev/null || true)
+            fi
           fi
+
+          PR_NUMBER=""
+          PR_URL=""
+          if [ -n "$PR_JSON" ]; then
+            PR_NUMBER=$(printf '%s' "$PR_JSON" | jq -r '.number // empty')
+            PR_URL=$(printf '%s' "$PR_JSON" | jq -r '.url // empty')
+          fi
+
+          if [ "$CLAUDE_OUTCOME" != "success" ]; then
+            STATUS="failed"
+          elif [ -n "$PR_URL" ]; then
+            STATUS="pr"
+          elif [ -f /tmp/no-changes-reason.txt ]; then
+            STATUS="no_changes"
+          else
+            # Succeeded but no PR and no stated reason: fell through the cracks.
+            STATUS="indeterminate"
+          fi
+
+          {
+            echo "status=$STATUS"
+            echo "pr_number=$PR_NUMBER"
+            echo "pr_url=$PR_URL"
+          } >> "$GITHUB_OUTPUT"
+          echo "Outcome classified as: $STATUS (pr=${PR_URL:-none})"
+
+      - name: Assign responsible engineer to PR
+        if: needs.resolve-inputs.outputs.github_user != '' && steps.classify.outputs.pr_number != ''
+        env:
+          GITHUB_USER: ${{ needs.resolve-inputs.outputs.github_user }}
+          PR_NUMBER: ${{ steps.classify.outputs.pr_number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "$PR_NUMBER" --add-assignee "$GITHUB_USER"
+          echo "Assigned $GITHUB_USER to PR #$PR_NUMBER"
 
       - name: Comment result on Jira ticket
         if: always() && inputs.jira_base_url != '' && inputs.jira_user_email != ''
@@ -361,41 +417,30 @@ jobs:
           JIRA_USER_EMAIL: ${{ inputs.jira_user_email }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           TICKET_ID: ${{ inputs.ticket_id }}
-          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
-          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          STATUS: ${{ steps.classify.outputs.status }}
+          PR_URL: ${{ steps.classify.outputs.pr_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           if [ -z "$JIRA_API_TOKEN" ]; then
             echo "JIRA_API_TOKEN not set, skipping Jira comment"
             exit 0
           fi
 
-          if [ "$CLAUDE_OUTCOME" = "success" ]; then
-            # Look for a PR opened from the branch Claude created
-            PR_URL=""
-            if [ -n "$BRANCH_NAME" ]; then
-              PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url' 2>/dev/null || true)
-            fi
-            # Fallback: list open PRs (REST, consistent) and filter by ticket ID prefix.
-            # Avoid `--search`, which lags 30-90s for newly-created PRs.
-            # Titles may be bare ("APP-123 ...") or bracketed ("[APP-123] ..."), so match both.
-            if [ -z "$PR_URL" ]; then
-              PR_URL=$(gh pr list --state open --limit 50 --json url,title \
-                --jq "[.[] | select((.title | startswith(\"$TICKET_ID\")) or (.title | startswith(\"[$TICKET_ID]\")))] | .[0].url // empty" 2>/dev/null || true)
-            fi
-
-            if [ -n "$PR_URL" ]; then
+          case "$STATUS" in
+            pr)
               MSG="✅ Claude opened a PR for this ticket: $PR_URL"
-            elif [ -f /tmp/no-changes-reason.txt ]; then
+              ;;
+            no_changes)
               REASON=$(cat /tmp/no-changes-reason.txt)
               MSG="ℹ️ Claude determined no changes are needed for this SDK. Reason: $REASON. View logs: $RUN_URL"
-            else
-              MSG="⚠️ Claude completed but did not open a PR. This may mean the ticket requires manual intervention or Claude could not determine a code change. View logs: $RUN_URL"
-            fi
-          else
-            MSG="❌ Claude failed to implement this ticket. View logs: $RUN_URL"
-          fi
+              ;;
+            indeterminate)
+              MSG="⚠️ Claude completed but opened no PR and gave no reason. This needs manual investigation. View logs: $RUN_URL"
+              ;;
+            *)
+              MSG="❌ Claude failed to implement this ticket. View logs: $RUN_URL"
+              ;;
+          esac
 
           # Post comment to Jira using Atlassian Document Format
           ESCAPED_MSG=$(echo "$MSG" | jq -Rs '.')
@@ -404,6 +449,13 @@ jobs:
             -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":${ESCAPED_MSG}}]}]}}"
+
+      # Fail the job on an indeterminate outcome so it shows red, not green.
+      - name: Flag indeterminate outcome
+        if: always() && steps.classify.outputs.status == 'indeterminate'
+        run: |
+          echo "::error::Claude finished with no PR and no /tmp/no-changes-reason.txt. Inspect the claude-execution-output artifact and run logs."
+          exit 1
 
       - name: Notify Slack of failure
         if: failure()

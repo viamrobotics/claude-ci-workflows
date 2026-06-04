@@ -349,6 +349,20 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      # Mint a fresh app token for opening the PR. Reusing the token the Claude
+      # action minted via OIDC (steps.claude.outputs.github_token) is unreliable:
+      # after a long agent run it can be rejected by the API with a 401 "Bad
+      # credentials". A token minted here is fresh, and — being an app token, not
+      # the default GITHUB_TOKEN — the PR it opens still triggers downstream CI.
+      - name: Generate token for PR creation
+        id: pr-token
+        if: steps.claude.outcome == 'success'
+        # actions/create-github-app-token@v2.2.1
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf
+        with:
+          app-id: ${{ secrets.CI_GITHUB_APP_ID }}
+          private-key: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
+
       # Open the PR deterministically: the agent pushes the branch and writes
       # the title/body to /tmp; it never runs `gh pr create` (the Bash matcher
       # rejects multi-line args). Uses github-script (not gh) so it works in
@@ -361,9 +375,9 @@ jobs:
           BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
           TICKET_ID: ${{ inputs.ticket_id }}
         with:
-          # Same token the action used (Claude app token if available) so the PR
-          # is authored identically and triggers CI exactly as the agent's would.
-          github-token: ${{ steps.claude.outputs.github_token || github.token }}
+          # Fresh app token (see "Generate token for PR creation"); falls back to
+          # the job token only if minting was skipped.
+          github-token: ${{ steps.pr-token.outputs.token || github.token }}
           script: |
             const fs = require('fs');
             if (!fs.existsSync('/tmp/pr-title.txt')) {

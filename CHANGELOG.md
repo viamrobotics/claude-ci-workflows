@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.1.2...v2.2.0) (2026-06-04)
+
+
+### Features
+
+* enforce Jira ticket ID prefix in PR title ([#115](https://github.com/viamrobotics/claude-ci-workflows/issues/115)) ([f2d4f1d](https://github.com/viamrobotics/claude-ci-workflows/commit/f2d4f1d1384f9011abbaa63e77bef730b89e373b))
+
 ## [2.1.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.1.1...v2.1.2) (2026-06-04)
 
 

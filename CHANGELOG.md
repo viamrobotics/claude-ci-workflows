@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.4...v2.1.0) (2026-06-04)
+
+
+### Features
+
+* deterministic PR creation and always-on execution-log artifacts ([#109](https://github.com/viamrobotics/claude-ci-workflows/issues/109)) ([b846902](https://github.com/viamrobotics/claude-ci-workflows/commit/b84690271d8f673ff0945a8604202ef5c8a6e065))
+
 ## [2.0.4](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.3...v2.0.4) (2026-06-02)
 
 

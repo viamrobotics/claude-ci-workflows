@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.1.1...v2.1.2) (2026-06-04)
+
+
+### Bug Fixes
+
+* derive PR branch from git HEAD when branch_name output is empty ([#113](https://github.com/viamrobotics/claude-ci-workflows/issues/113)) ([1148acc](https://github.com/viamrobotics/claude-ci-workflows/commit/1148accc184cc27dddc96bb7ed48c95ee300e506))
+
 ## [2.1.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.1.0...v2.1.1) (2026-06-04)
 
 

@@ -351,33 +351,43 @@ jobs:
 
       # Open the PR deterministically: the agent pushes the branch and writes
       # the title/body to /tmp; it never runs `gh pr create` (the Bash matcher
-      # rejects multi-line args). This yields the PR URL directly — no
-      # search-index race to "find" the PR afterward.
+      # rejects multi-line args). Uses github-script (not gh) so it works in
+      # caller-provided containers where gh is not installed.
       - name: Open PR
         id: open-pr
         if: steps.claude.outcome == 'success'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+        with:
           # Same token the action used (Claude app token if available) so the PR
           # is authored identically and triggers CI exactly as the agent's would.
-          GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
-          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
-        run: |
-          if [ ! -f /tmp/pr-title.txt ]; then
-            echo "No /tmp/pr-title.txt: agent did not request a PR."
-            exit 0
-          fi
-          [ -f /tmp/pr-body.txt ] || : > /tmp/pr-body.txt
-          if [ -z "$BRANCH_NAME" ]; then
-            BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
-          fi
-          TITLE=$(cat /tmp/pr-title.txt)
-          # Idempotent on re-runs: reuse an open PR for this exact branch.
-          PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url // empty' 2>/dev/null || true)
-          if [ -z "$PR_URL" ]; then
-            PR_URL=$(gh pr create --head "$BRANCH_NAME" --title "$TITLE" --body-file /tmp/pr-body.txt)
-          fi
-          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-          echo "PR: $PR_URL"
+          github-token: ${{ steps.claude.outputs.github_token || github.token }}
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('/tmp/pr-title.txt')) {
+              core.info('No /tmp/pr-title.txt: agent did not request a PR.');
+              return;
+            }
+            const branch = process.env.BRANCH_NAME;
+            if (!branch) {
+              core.setFailed('Claude produced no branch_name output; cannot open a PR.');
+              return;
+            }
+            const title = fs.readFileSync('/tmp/pr-title.txt', 'utf8').trim();
+            const body = fs.existsSync('/tmp/pr-body.txt')
+              ? fs.readFileSync('/tmp/pr-body.txt', 'utf8') : '';
+            const { owner, repo } = context.repo;
+            const base = (await github.rest.repos.get({ owner, repo })).data.default_branch;
+            // Idempotent on re-runs: reuse an open PR for this exact branch.
+            const existing = await github.rest.pulls.list({
+              owner, repo, state: 'open', head: `${owner}:${branch}`,
+            });
+            const pr = existing.data[0]
+              || (await github.rest.pulls.create({ owner, repo, head: branch, base, title, body })).data;
+            core.setOutput('pr_url', pr.html_url);
+            core.setOutput('pr_number', String(pr.number));
+            core.info(`PR: ${pr.html_url}`);
 
       # Classify the outcome for the comment + flag steps. always() so it also
       # runs after a Claude failure (when Open PR was skipped).
@@ -405,14 +415,20 @@ jobs:
           echo "Outcome classified as: $STATUS (pr=${PR_URL:-none})"
 
       - name: Assign responsible engineer to PR
-        if: needs.resolve-inputs.outputs.github_user != '' && steps.open-pr.outputs.pr_url != ''
+        if: needs.resolve-inputs.outputs.github_user != '' && steps.open-pr.outputs.pr_number != ''
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           GITHUB_USER: ${{ needs.resolve-inputs.outputs.github_user }}
-          PR_URL: ${{ steps.open-pr.outputs.pr_url }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr edit "$PR_URL" --add-assignee "$GITHUB_USER"
-          echo "Assigned $GITHUB_USER to $PR_URL"
+          PR_NUMBER: ${{ steps.open-pr.outputs.pr_number }}
+        with:
+          script: |
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.PR_NUMBER),
+              assignees: [process.env.GITHUB_USER],
+            });
+            core.info(`Assigned ${process.env.GITHUB_USER} to PR #${process.env.PR_NUMBER}`);
 
       - name: Comment result on Jira ticket
         if: always() && inputs.jira_base_url != '' && inputs.jira_user_email != ''

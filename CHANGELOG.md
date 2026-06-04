@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.1.0...v2.1.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* open PRs via github-script so it works without gh in containers ([#111](https://github.com/viamrobotics/claude-ci-workflows/issues/111)) ([022f9b1](https://github.com/viamrobotics/claude-ci-workflows/commit/022f9b182ef22da2316195dc8e10fdcf557d2064))
+
 ## [2.1.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.0.4...v2.1.0) (2026-06-04)
 
 

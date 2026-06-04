@@ -186,6 +186,20 @@ jobs:
             --max-turns ${{ needs.resolve-inputs.outputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 
+      # Keep the execution log so no-PR outcomes are debuggable after teardown.
+      - name: Upload Claude execution output
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: claude-execution-output
+          # Use the action's output path; fall back to the temp location
+          # (container-safe). A blank line is skipped if the output is empty.
+          path: |
+            ${{ steps.claude.outputs.execution_file }}
+            ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Assign issue reporter to PR
         if: inputs.issue_author != ''
         env:

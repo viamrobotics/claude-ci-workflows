@@ -283,6 +283,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Run Claude (manifest conflict fallback)
+        id: claude
         if: steps.rebase-attempt.outputs.result == 'needs-claude'
         uses: anthropics/claude-code-action@26ddc358fe3befff50c5ec2f80304c90c763f6f8 # v1.0.90
         env:
@@ -329,6 +330,22 @@ jobs:
             --model ${{ inputs.model }}
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
+
+      # Keep the execution log so failed rebases are debuggable after teardown.
+      # Only the Claude fallback path produces one; name is per-PR (reusable-
+      # workflow invocations share one artifact namespace).
+      - name: Upload Claude execution output
+        if: always() && steps.claude.outcome != 'skipped'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: claude-execution-output-pr-${{ inputs.pr_number }}
+          # Use the action's output path; fall back to the temp location
+          # (container-safe). A blank line is skipped if the output is empty.
+          path: |
+            ${{ steps.claude.outputs.execution_file }}
+            ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: warn
+          retention-days: 7
 
       # ---- Finalize: stage, commit, force-push (or close as no-op) ----
 

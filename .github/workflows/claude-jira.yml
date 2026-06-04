@@ -327,7 +327,7 @@ jobs:
             - Branch name MUST start with `claude/` prefix.
             - Before creating a branch, committing, or pushing, run `git status --porcelain`. If the output is empty, do NOT create a branch — write a short explanation to /tmp/no-changes-reason.txt and stop.
             - If after investigating you determine this SDK does not need changes for this ticket, write a short explanation to /tmp/no-changes-reason.txt and stop.
-            - To open the PR: commit, push the `claude/` branch, then write the PR title to /tmp/pr-title.txt (it MUST start with the Jira ticket ID, e.g. `${{ inputs.ticket_id }} ...`) and the PR body to /tmp/pr-body.txt. Do NOT run `gh pr create` — the workflow opens the PR from those files.
+            - To open the PR: commit, push the `claude/` branch, then write the PR title to /tmp/pr-title.txt (it MUST start with the Jira ticket ID in brackets, e.g. `[${{ inputs.ticket_id }}] ...`) and the PR body to /tmp/pr-body.txt. Do NOT run `gh pr create` — the workflow opens the PR from those files.
             ${{ needs.resolve-inputs.outputs.github_user != '' && format('- In /tmp/pr-body.txt, include a "DRI" section: **@{0}** is the responsible engineer for this PR.', needs.resolve-inputs.outputs.github_user) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
@@ -359,6 +359,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+          TICKET_ID: ${{ inputs.ticket_id }}
         with:
           # Same token the action used (Claude app token if available) so the PR
           # is authored identically and triggers CI exactly as the agent's would.
@@ -383,7 +384,19 @@ jobs:
               core.setFailed('Could not determine the PR branch: no branch_name output and git HEAD is detached.');
               return;
             }
-            const title = fs.readFileSync('/tmp/pr-title.txt', 'utf8').trim();
+            // Guarantee the Jira ticket ID is in the title even if the agent
+            // omitted it. Prefix `[TICKET_ID] ` unless the title already leads
+            // with the ID (with or without brackets, case-insensitive), so
+            // titles aren't double-tagged.
+            const ticket = (process.env.TICKET_ID || '').trim();
+            let title = fs.readFileSync('/tmp/pr-title.txt', 'utf8').trim();
+            if (ticket) {
+              const t = title.toLowerCase();
+              const id = ticket.toLowerCase();
+              if (!t.startsWith(id) && !t.startsWith(`[${id}]`)) {
+                title = `[${ticket}] ${title}`;
+              }
+            }
             const body = fs.existsSync('/tmp/pr-body.txt')
               ? fs.readFileSync('/tmp/pr-body.txt', 'utf8') : '';
             const { owner, repo } = context.repo;

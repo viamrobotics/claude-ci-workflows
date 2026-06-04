@@ -325,10 +325,10 @@ jobs:
             - Read CLAUDE.md for repository conventions.
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
-            - Include the Jira ticket ID in the PR title.
-            - Before creating a branch, committing, pushing, or opening a PR, run `git status --porcelain`. If the output is empty, do NOT create a branch or PR — write a short explanation to /tmp/no-changes-reason.txt and stop.
-            - If after investigating you determine this SDK does not need changes for this ticket, write a short explanation to /tmp/no-changes-reason.txt and do NOT create a branch or PR.
-            ${{ needs.resolve-inputs.outputs.github_user != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', needs.resolve-inputs.outputs.github_user) || '' }}
+            - Before creating a branch, committing, or pushing, run `git status --porcelain`. If the output is empty, do NOT create a branch — write a short explanation to /tmp/no-changes-reason.txt and stop.
+            - If after investigating you determine this SDK does not need changes for this ticket, write a short explanation to /tmp/no-changes-reason.txt and stop.
+            - To open the PR: commit, push the `claude/` branch, then write the PR title to /tmp/pr-title.txt (it MUST start with the Jira ticket ID, e.g. `${{ inputs.ticket_id }} ...`) and the PR body to /tmp/pr-body.txt. Do NOT run `gh pr create` — the workflow opens the PR from those files.
+            ${{ needs.resolve-inputs.outputs.github_user != '' && format('- In /tmp/pr-body.txt, include a "DRI" section: **@{0}** is the responsible engineer for this PR.', needs.resolve-inputs.outputs.github_user) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
             --model ${{ inputs.model }}
@@ -349,39 +349,45 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      # Resolve the PR once and classify the outcome; the assign, Jira-comment,
-      # and flag steps below all read these outputs. always() so it also runs
-      # after a Claude failure.
+      # Open the PR deterministically: the agent pushes the branch and writes
+      # the title/body to /tmp; it never runs `gh pr create` (the Bash matcher
+      # rejects multi-line args). This yields the PR URL directly — no
+      # search-index race to "find" the PR afterward.
+      - name: Open PR
+        id: open-pr
+        if: steps.claude.outcome == 'success'
+        env:
+          # Same token the action used (Claude app token if available) so the PR
+          # is authored identically and triggers CI exactly as the agent's would.
+          GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+        run: |
+          if [ ! -f /tmp/pr-title.txt ]; then
+            echo "No /tmp/pr-title.txt: agent did not request a PR."
+            exit 0
+          fi
+          [ -f /tmp/pr-body.txt ] || : > /tmp/pr-body.txt
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          TITLE=$(cat /tmp/pr-title.txt)
+          # Idempotent on re-runs: reuse an open PR for this exact branch.
+          PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url // empty' 2>/dev/null || true)
+          if [ -z "$PR_URL" ]; then
+            PR_URL=$(gh pr create --head "$BRANCH_NAME" --title "$TITLE" --body-file /tmp/pr-body.txt)
+          fi
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "PR: $PR_URL"
+
+      # Classify the outcome for the comment + flag steps. always() so it also
+      # runs after a Claude failure (when Open PR was skipped).
       - name: Classify outcome
         id: classify
         if: always()
         env:
           CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
-          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
-          TICKET_ID: ${{ inputs.ticket_id }}
-          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ steps.open-pr.outputs.pr_url }}
         run: |
-          # Find the PR by branch, then by ticket-ID title prefix (bare or
-          # bracketed). REST list, not --search: the index lags 30-90s on new PRs.
-          PR_JSON=""
-          if [ "$CLAUDE_OUTCOME" = "success" ]; then
-            if [ -n "$BRANCH_NAME" ]; then
-              PR_JSON=$(gh pr list --state open --head "$BRANCH_NAME" --json number,url \
-                --jq '.[0] // empty' 2>/dev/null || true)
-            fi
-            if [ -z "$PR_JSON" ]; then
-              PR_JSON=$(gh pr list --state open --limit 50 --json number,url,title \
-                --jq "[.[] | select((.title | startswith(\"$TICKET_ID\")) or (.title | startswith(\"[$TICKET_ID]\")))] | .[0] // empty" 2>/dev/null || true)
-            fi
-          fi
-
-          PR_NUMBER=""
-          PR_URL=""
-          if [ -n "$PR_JSON" ]; then
-            PR_NUMBER=$(printf '%s' "$PR_JSON" | jq -r '.number // empty')
-            PR_URL=$(printf '%s' "$PR_JSON" | jq -r '.url // empty')
-          fi
-
           if [ "$CLAUDE_OUTCOME" != "success" ]; then
             STATUS="failed"
           elif [ -n "$PR_URL" ]; then
@@ -392,23 +398,21 @@ jobs:
             # Succeeded but no PR and no stated reason: fell through the cracks.
             STATUS="indeterminate"
           fi
-
           {
             echo "status=$STATUS"
-            echo "pr_number=$PR_NUMBER"
             echo "pr_url=$PR_URL"
           } >> "$GITHUB_OUTPUT"
           echo "Outcome classified as: $STATUS (pr=${PR_URL:-none})"
 
       - name: Assign responsible engineer to PR
-        if: needs.resolve-inputs.outputs.github_user != '' && steps.classify.outputs.pr_number != ''
+        if: needs.resolve-inputs.outputs.github_user != '' && steps.open-pr.outputs.pr_url != ''
         env:
           GITHUB_USER: ${{ needs.resolve-inputs.outputs.github_user }}
-          PR_NUMBER: ${{ steps.classify.outputs.pr_number }}
+          PR_URL: ${{ steps.open-pr.outputs.pr_url }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr edit "$PR_NUMBER" --add-assignee "$GITHUB_USER"
-          echo "Assigned $GITHUB_USER to PR #$PR_NUMBER"
+          gh pr edit "$PR_URL" --add-assignee "$GITHUB_USER"
+          echo "Assigned $GITHUB_USER to $PR_URL"
 
       - name: Comment result on Jira ticket
         if: always() && inputs.jira_base_url != '' && inputs.jira_user_email != ''

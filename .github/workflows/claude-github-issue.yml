@@ -176,10 +176,9 @@ jobs:
             - Read CLAUDE.md for repository conventions.
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
-            - Before creating a branch, committing, pushing, or opening a PR, run `git status --porcelain`. If the output is empty, do NOT create a branch or PR — comment on issue #${{ inputs.issue_number }} explaining why no changes were needed and stop.
-            - Include the issue reference in the PR title (e.g., "feat: implement feature (#${{ inputs.issue_number }})").
-            - In the PR description, link to the original issue with `Closes #${{ inputs.issue_number }}`.
-            ${{ inputs.issue_author != '' && format('- In the PR description, add a "DRI" section: **@{0}** is the responsible engineer for this PR.', inputs.issue_author) || '' }}
+            - Before creating a branch, committing, or pushing, run `git status --porcelain`. If the output is empty, do NOT create a branch — comment on issue #${{ inputs.issue_number }} explaining why no changes were needed and stop.
+            - To open the PR: commit, push the `claude/` branch, then write the PR title to /tmp/pr-title.txt (include the issue reference, e.g. `feat: implement feature (#${{ inputs.issue_number }})`) and the PR body to /tmp/pr-body.txt (link the issue with `Closes #${{ inputs.issue_number }}`). Do NOT run `gh pr create` — the workflow opens the PR from those files.
+            ${{ inputs.issue_author != '' && format('- In /tmp/pr-body.txt, include a "DRI" section: **@{0}** is the responsible engineer for this PR.', inputs.issue_author) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
             --model ${{ inputs.model }}
@@ -200,54 +199,66 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Assign issue reporter to PR
-        if: inputs.issue_author != ''
+      # Open the PR deterministically: the agent pushes the branch and writes
+      # the title/body to /tmp; it never runs `gh pr create` (the Bash matcher
+      # rejects multi-line args), which also yields the PR URL directly.
+      - name: Open PR
+        id: open-pr
+        if: steps.claude.outcome == 'success'
         env:
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          # Same token the action used (Claude app token if available) so the PR
+          # is authored identically and triggers CI exactly as the agent's would.
+          GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+        run: |
+          if [ ! -f /tmp/pr-title.txt ]; then
+            echo "No /tmp/pr-title.txt: agent did not request a PR."
+            exit 0
+          fi
+          [ -f /tmp/pr-body.txt ] || : > /tmp/pr-body.txt
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          TITLE=$(cat /tmp/pr-title.txt)
+          # Idempotent on re-runs: reuse an open PR for this exact branch.
+          PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url // empty' 2>/dev/null || true)
+          if [ -z "$PR_URL" ]; then
+            PR_URL=$(gh pr create --head "$BRANCH_NAME" --title "$TITLE" --body-file /tmp/pr-body.txt)
+          fi
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "PR: $PR_URL"
+
+      - name: Assign issue reporter to PR
+        if: inputs.issue_author != '' && steps.open-pr.outputs.pr_url != ''
+        env:
           ISSUE_AUTHOR: ${{ inputs.issue_author }}
+          PR_URL: ${{ steps.open-pr.outputs.pr_url }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          PR_NUMBER=$(gh pr list --state open --search "#$ISSUE_NUMBER in:title" --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -n "$PR_NUMBER" ]; then
-            gh pr edit "$PR_NUMBER" --add-assignee "$ISSUE_AUTHOR"
-            echo "Assigned $ISSUE_AUTHOR to PR #$PR_NUMBER"
-          else
-            echo "::warning::Could not find open PR referencing issue #$ISSUE_NUMBER to assign"
-          fi
+          gh pr edit "$PR_URL" --add-assignee "$ISSUE_AUTHOR"
+          echo "Assigned $ISSUE_AUTHOR to $PR_URL"
 
       - name: Comment result on issue
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
-          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
           CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+          PR_URL: ${{ steps.open-pr.outputs.pr_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ "$CLAUDE_OUTCOME" = "success" ]; then
-            # Look for a PR opened from the branch Claude created
-            PR_URL=""
-            if [ -n "$BRANCH_NAME" ]; then
-              PR_URL=$(gh pr list --state open --head "$BRANCH_NAME" --json url --jq '.[0].url' 2>/dev/null || true)
-            fi
-            # Fallback: search by issue number in PR title
-            if [ -z "$PR_URL" ]; then
-              PR_URL=$(gh pr list --state open --search "#$ISSUE_NUMBER in:title" --json url --jq '.[0].url' 2>/dev/null || true)
-            fi
-
-            if [ -n "$PR_URL" ]; then
-              gh issue comment "$ISSUE_NUMBER" \
-                --repo "$GITHUB_REPOSITORY" \
-                --body "✅ Claude opened a PR for this issue: $PR_URL"
-            else
-              gh issue comment "$ISSUE_NUMBER" \
-                --repo "$GITHUB_REPOSITORY" \
-                --body "⚠️ Claude completed but did not open a PR. This may mean the issue requires manual intervention or Claude could not determine a code change. [View logs]($RUN_URL)"
-            fi
-          else
+          if [ "$CLAUDE_OUTCOME" != "success" ]; then
             gh issue comment "$ISSUE_NUMBER" \
               --repo "$GITHUB_REPOSITORY" \
               --body "❌ Claude failed to implement this issue. [View logs]($RUN_URL)"
+          elif [ -n "$PR_URL" ]; then
+            gh issue comment "$ISSUE_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "✅ Claude opened a PR for this issue: $PR_URL"
+          else
+            gh issue comment "$ISSUE_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "⚠️ Claude completed but did not open a PR. This may mean the issue requires manual intervention or Claude could not determine a code change. [View logs]($RUN_URL)"
           fi
 
       - name: Notify Slack of failure

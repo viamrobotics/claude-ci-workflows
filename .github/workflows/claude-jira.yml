@@ -369,9 +369,18 @@ jobs:
               core.info('No /tmp/pr-title.txt: agent did not request a PR.');
               return;
             }
-            const branch = process.env.BRANCH_NAME;
+            // The action only sets branch_name when it manages the branch; here
+            // the agent creates it (git checkout -b claude/...), so fall back to
+            // the HEAD the agent left checked out.
+            let branch = process.env.BRANCH_NAME;
             if (!branch) {
-              core.setFailed('Claude produced no branch_name output; cannot open a PR.');
+              const head = await exec.getExecOutput(
+                'git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+                { silent: true, ignoreReturnCode: true });
+              branch = head.stdout.trim();
+            }
+            if (!branch || branch === 'HEAD') {
+              core.setFailed('Could not determine the PR branch: no branch_name output and git HEAD is detached.');
               return;
             }
             const title = fs.readFileSync('/tmp/pr-title.txt', 'utf8').trim();

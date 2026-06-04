@@ -1,0 +1,24 @@
+name: PR Title
+
+# Squash-merge uses the PR title as the commit subject, and release-please
+# classifies releases from that subject's conventional-commit type. A
+# non-conventional title (e.g. one auto-derived from a branch name) silently
+# skips the release, so enforce the convention before merge.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      # amannn/action-semantic-pull-request@v6.1.1
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

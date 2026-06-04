@@ -246,7 +246,8 @@ jobs:
           EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
         run: .ci-prompts/scripts/assemble-system-prompt.sh
 
-      - uses: anthropics/claude-code-action@26ddc358fe3befff50c5ec2f80304c90c763f6f8 # v1.0.90
+      - id: claude
+        uses: anthropics/claude-code-action@26ddc358fe3befff50c5ec2f80304c90c763f6f8 # v1.0.90
         env:
           AUTH_TEST_CREDENTIALS: ${{ secrets.AUTH_TEST_CREDENTIALS }}
         with:
@@ -323,3 +324,17 @@ jobs:
             --model ${{ inputs.model }}
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
+
+      # Keep the execution log so failed runs are debuggable after teardown.
+      - name: Upload Claude execution output
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: claude-execution-output
+          # Use the action's output path; fall back to the temp location
+          # (container-safe). A blank line is skipped if the output is empty.
+          path: |
+            ${{ steps.claude.outputs.execution_file }}
+            ${{ runner.temp }}/claude-execution-output.json
+          if-no-files-found: warn
+          retention-days: 7

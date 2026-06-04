@@ -35,5 +35,10 @@ You MUST read CLAUDE.md before starting — it defines all repository convention
 - Run `git add` and `git commit` as **separate** commands — never chain with `&&`.
 - **NEVER use HEREDOC or multi-line strings in git commit commands** — the Bash permission pattern cannot match them and they will be denied.
 - Instead, write the commit message to `/tmp/commit-msg.txt` using the Write tool, then run: `git commit --file /tmp/commit-msg.txt`
-- For PRs and reviews, write body to a temp file and use --body-file.
+- For review bodies, write the body to a temp file and use `--body-file` (PR creation is handled by the workflow — see "Opening a PR").
 - Write temp files to `/tmp/` and do NOT clean them up — runners are ephemeral.
+
+## Opening a PR
+
+- NEVER run `gh pr create` — its multi-line `--body` cannot match the Bash permission pattern and will be denied.
+- To open a PR: commit, push the branch, then write the title to `/tmp/pr-title.txt` (single line) and the body to `/tmp/pr-body.txt` using the Write tool. The workflow opens the PR from those files.

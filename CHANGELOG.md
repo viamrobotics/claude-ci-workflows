@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.0...v2.2.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* mint fresh app token for PR creation instead of reusing OIDC token ([#117](https://github.com/viamrobotics/claude-ci-workflows/issues/117)) ([c1b21f3](https://github.com/viamrobotics/claude-ci-workflows/commit/c1b21f31acd43b2bcd5538bd2d66cb3f1ee0d1f9))
+
 ## [2.2.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.1.2...v2.2.0) (2026-06-04)
 
 

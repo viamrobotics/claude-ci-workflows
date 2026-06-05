@@ -189,8 +189,10 @@ jobs:
   rebase:
     needs: resolve-pr
     if: needs.resolve-pr.outputs.skip != 'true'
-    # viamrobotics/claude-ci-workflows@v2.2.1
-    uses: viamrobotics/claude-ci-workflows/.github/workflows/claude-dependabot-sweep-rebase-job.yml@5506bdaf04cc7d1adbd2df0f31f108834b01aea6
+    # Local reference: resolves to this repo at the same ref the caller pinned
+    # for the rebase workflow, so the nested rebase-job always travels with the
+    # rebase version (no floating @main, no SHA to bump each release).
+    uses: ./.github/workflows/claude-dependabot-sweep-rebase-job.yml
     with:
       package: ${{ needs.resolve-pr.outputs.package }}
       severity: ${{ needs.resolve-pr.outputs.severity }}

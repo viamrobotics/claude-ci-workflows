@@ -1,20 +1,12 @@
 name: Claude Dependabot Sweep Rebase Job (Reusable, Internal)
 
-# Internal reusable workflow that performs the rebase of a single Dependabot
-# sweep PR. Not intended to be called directly by external repos — it is
-# orchestrated by:
-#   - claude-dependabot-sweep.yml (auto-rebase path: matrix calls this once per
-#     conflicting sweep PR)
-#   - claude-dependabot-sweep-rebase.yml (comment-triggered: a single PR)
+# Internal reusable workflow: rebases a single Dependabot sweep PR. Not called
+# directly — orchestrated by claude-dependabot-sweep.yml (auto-rebase, one leg
+# per conflicting PR) and claude-dependabot-sweep-rebase.yml (comment-triggered).
 #
-# Flow:
-#   1. Reset the PR's branch to the default branch HEAD.
-#   2. Try to replay the original manifest patch deterministically; regenerate
-#      the lockfile via install_command.
-#   3. If the manifest patch can't apply (rare), fall back to Claude with the
-#      same prompt shape as the sweep's fix path.
-#   4. Workflow handles git/PR side-effects (commit, force-push, comment,
-#      close PR if no changes are needed).
+# Flow: reset the branch to the default-branch HEAD, replay the original manifest
+# patch and regenerate lockfiles; if the patch won't apply, fall back to Claude.
+# The workflow then commits, force-pushes, comments, or closes the PR as a no-op.
 
 on:
   workflow_call:
@@ -137,16 +129,14 @@ jobs:
 
           git reset --hard "origin/$DEFAULT_BRANCH"
 
-          # Recognized lockfile basenames. Lockfiles are excluded from the
-          # manifest patch and either auto-regenerated (via the case below) or
-          # trigger Claude fallback if we don't know the regen command.
+          # Lockfile basenames, excluded from the manifest patch. Each is either
+          # auto-regenerated below or falls back to Claude if no regen command.
           LOCK_PATTERN='(^|/)(go\.sum|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb|pubspec\.lock|Cargo\.lock|uv\.lock|poetry\.lock|Pipfile\.lock|Gemfile\.lock|composer\.lock|mix\.lock)$'
           LOCK_FILES=$(echo "$CHANGED_FILES" | grep -E "$LOCK_PATTERN" || true)
           MANIFEST_FILES=$(echo "$CHANGED_FILES" | grep -vE "$LOCK_PATTERN" || true)
 
-          # Build the per-dir regen plan and write it to /tmp/rebase-plan.sh.
-          # Auto-detects regen command per lockfile basename. Empty plan =>
-          # no lockfiles changed, no regen needed.
+          # Build a per-dir regen plan in /tmp/rebase-plan.sh, one command per
+          # lockfile basename. Empty plan => no lockfiles changed.
           : > /tmp/rebase-plan.sh
           SEEN_KEYS=""
           while IFS= read -r f; do
@@ -331,16 +321,14 @@ jobs:
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 
-      # Keep the execution log so failed rebases are debuggable after teardown.
-      # Only the Claude fallback path produces one; name is per-PR (reusable-
-      # workflow invocations share one artifact namespace).
+      # Keep the execution log (Claude fallback path only) for debugging; name is
+      # per-PR since reusable-workflow invocations share one artifact namespace.
       - name: Upload Claude execution output
         if: always() && steps.claude.outcome != 'skipped'
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: claude-execution-output-pr-${{ inputs.pr_number }}
-          # Use the action's output path; fall back to the temp location
-          # (container-safe). A blank line is skipped if the output is empty.
+          # Action's output path, with a container-safe temp fallback.
           path: |
             ${{ steps.claude.outputs.execution_file }}
             ${{ runner.temp }}/claude-execution-output.json

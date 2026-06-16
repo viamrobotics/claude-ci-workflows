@@ -1,9 +1,7 @@
 name: Claude Jira Implementation (Reusable)
 
-# Implements a Jira ticket using Claude Code Action.
-# Creates a branch with claude/ prefix, opens a PR, notifies Slack on failure.
-#
-# Callers handle triggers (repository_dispatch, workflow_dispatch) and pass ticket data.
+# Implements a Jira ticket with Claude Code: branches with a claude/ prefix,
+# opens a PR, alerts Slack on failure. Callers handle triggers and pass ticket data.
 
 on:
   workflow_call:
@@ -92,12 +90,10 @@ on:
         type: string
         default: ''
     secrets:
-      # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
-      # in the Internal Usage Workspace on Claude Console.
+      # Org-level secret; key claude_code_key_jira_github_action (Claude Console).
       ANTHROPIC_API_KEY:
         required: true
-      # Set at viamrobotics org level. Alerts to #ai-workflows-alerts.
-      # Override at the repo level to send to a different Slack channel.
+      # Org-level secret; alerts to #ai-workflows-alerts. Override per-repo to redirect.
       SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL:
         required: false
       CI_GITHUB_APP_ID:
@@ -156,9 +152,8 @@ jobs:
         run: |
           set -o pipefail
           # shellcheck disable=SC2016
-          # Fetch all org members with login, display name, and email via GraphQL.
-          # This runs on a bare ubuntu-latest runner (not inside the caller's
-          # container) so that the gh CLI is always available.
+          # Fetch all org members (login, name, email) via GraphQL. Runs on a bare
+          # runner, not the caller's container, so gh is always available.
           MEMBERS=$(gh api graphql --paginate \
             -f org="viamrobotics" \
             -f query='
@@ -341,19 +336,15 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: claude-execution-output
-          # Use the action's output path; fall back to the temp location
-          # (container-safe). A blank line is skipped if the output is empty.
+          # Action's output path, with a container-safe temp fallback.
           path: |
             ${{ steps.claude.outputs.execution_file }}
             ${{ runner.temp }}/claude-execution-output.json
           if-no-files-found: warn
           retention-days: 7
 
-      # Mint a fresh app token for opening the PR. Reusing the token the Claude
-      # action minted via OIDC (steps.claude.outputs.github_token) is unreliable:
-      # after a long agent run it can be rejected by the API with a 401 "Bad
-      # credentials". A token minted here is fresh, and — being an app token, not
-      # the default GITHUB_TOKEN — the PR it opens still triggers downstream CI.
+      # Fresh app token for the PR: a token reused after the long agent run can
+      # 401, and an app token (unlike GITHUB_TOKEN) lets the new PR trigger CI.
       - name: Generate token for PR creation
         id: pr-token
         if: steps.claude.outcome == 'success'
@@ -363,10 +354,8 @@ jobs:
           app-id: ${{ secrets.CI_GITHUB_APP_ID }}
           private-key: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
 
-      # Open the PR deterministically: the agent pushes the branch and writes
-      # the title/body to /tmp; it never runs `gh pr create` (the Bash matcher
-      # rejects multi-line args). Uses github-script (not gh) so it works in
-      # caller-provided containers where gh is not installed.
+      # The agent pushes the branch and writes title/body to /tmp; we open the PR
+      # via github-script (not gh) so it works in containers without gh installed.
       - name: Open PR
         id: open-pr
         if: steps.claude.outcome == 'success'
@@ -375,8 +364,7 @@ jobs:
           BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
           TICKET_ID: ${{ inputs.ticket_id }}
         with:
-          # Fresh app token (see "Generate token for PR creation"); falls back to
-          # the job token only if minting was skipped.
+          # Fresh app token (see above); job token only if minting was skipped.
           github-token: ${{ steps.pr-token.outputs.token || github.token }}
           script: |
             const fs = require('fs');
@@ -384,11 +372,8 @@ jobs:
               core.info('No /tmp/pr-title.txt: agent did not request a PR.');
               return;
             }
-            // Determine the PR branch. The agent creates it itself
-            // (git checkout -b claude/...), so the action's branch_name output
-            // is empty here. Prefer the name the agent recorded in
-            // /tmp/pr-branch.txt; then the action output; then, as a last
-            // resort, the HEAD the agent left checked out.
+            // The agent creates its own branch, so prefer the name it recorded
+            // in /tmp/pr-branch.txt, then branch_name, then the checked-out HEAD.
             let branch = fs.existsSync('/tmp/pr-branch.txt')
               ? fs.readFileSync('/tmp/pr-branch.txt', 'utf8').trim() : '';
             if (!branch) {
@@ -404,10 +389,8 @@ jobs:
               core.setFailed('Could not determine the PR branch: no /tmp/pr-branch.txt, no branch_name output, and git HEAD is detached.');
               return;
             }
-            // Guarantee the Jira ticket ID is in the title even if the agent
-            // omitted it. Prefix `[TICKET_ID] ` unless the title already leads
-            // with the ID (with or without brackets, case-insensitive), so
-            // titles aren't double-tagged.
+            // Prefix the ticket ID unless the title already leads with it
+            // (bracketed or not, case-insensitive), to avoid double-tagging.
             const ticket = (process.env.TICKET_ID || '').trim();
             let title = fs.readFileSync('/tmp/pr-title.txt', 'utf8').trim();
             if (ticket) {
@@ -431,8 +414,7 @@ jobs:
             core.setOutput('pr_number', String(pr.number));
             core.info(`PR: ${pr.html_url}`);
 
-      # Classify the outcome for the comment + flag steps. always() so it also
-      # runs after a Claude failure (when Open PR was skipped).
+      # Classify outcome for the comment + flag steps; always() to cover failures.
       - name: Classify outcome
         id: classify
         if: always()

@@ -1,9 +1,7 @@
 name: Claude CI Fix (Reusable)
 
-# Automatically retries CI failures on PRs opened by Claude (claude/* branches).
-# Tracks attempts via labels, caps at max_fix_attempts (default: 2).
-#
-# Callers handle the trigger (workflow_run on CI failure) and pass run_id + branch.
+# Retries CI failures on Claude PRs (claude/* branches), tracking attempts via
+# labels and capping at max_fix_attempts. Callers trigger on CI failure.
 
 on:
   workflow_call:
@@ -72,8 +70,7 @@ on:
         type: string
         default: ''
     secrets:
-      # Set at viamrobotics org level. Key: claude_code_key_jira_github_action
-      # in the Internal Usage Workspace on Claude Console.
+      # Org-level secret; key claude_code_key_jira_github_action (Claude Console).
       ANTHROPIC_API_KEY:
         required: true
       GIT_ACCESS_TOKEN:
@@ -174,10 +171,8 @@ jobs:
               labels: ['claude-fix-${{ steps.check.outputs.attempt }}']
             });
 
-      # Fetch failure logs on this bare runner (not inside the caller's
-      # container) so that the gh CLI is always available.
-      # Logs are uploaded as an artifact and downloaded in fix-ci to avoid
-      # ARG_MAX limits when passing large logs through job outputs / env vars.
+      # Fetch logs on a bare runner (not the caller's container) so gh is always
+      # available; pass them via artifact to dodge ARG_MAX limits on job outputs.
       - name: Get failure logs
         id: logs
         if: steps.check.outputs.should_fix == 'true'
@@ -285,8 +280,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: claude-execution-output
-          # Use the action's output path; fall back to the temp location
-          # (container-safe). A blank line is skipped if the output is empty.
+          # Action's output path, with a container-safe temp fallback.
           path: |
             ${{ steps.claude.outputs.execution_file }}
             ${{ runner.temp }}/claude-execution-output.json

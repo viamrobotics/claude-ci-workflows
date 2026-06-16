@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.3](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.2...v2.2.3) (2026-06-16)
+
+
+### Bug Fixes
+
+* explicit pr branch name ([#121](https://github.com/viamrobotics/claude-ci-workflows/issues/121)) ([ceb81f8](https://github.com/viamrobotics/claude-ci-workflows/commit/ceb81f8779dad07b0af4046fbfa226edab14d685))
+
 ## [2.2.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.1...v2.2.2) (2026-06-05)
 
 

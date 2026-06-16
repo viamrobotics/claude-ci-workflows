@@ -41,4 +41,4 @@ You MUST read CLAUDE.md before starting — it defines all repository convention
 ## Opening a PR
 
 - NEVER run `gh pr create` — its multi-line `--body` cannot match the Bash permission pattern and will be denied.
-- To open a PR: commit, push the branch, then write the title to `/tmp/pr-title.txt` (single line) and the body to `/tmp/pr-body.txt` using the Write tool. The workflow opens the PR from those files.
+- To open a PR: commit, push the branch, then write the exact branch name to `/tmp/pr-branch.txt` (single line), the title to `/tmp/pr-title.txt` (single line), and the body to `/tmp/pr-body.txt` using the Write tool. The workflow opens the PR from those files.

@@ -1,9 +1,7 @@
 name: Claude GitHub Issue Implementation (Reusable)
 
-# Implements a GitHub issue using Claude Code Action.
-# Creates a branch with claude/ prefix, opens a PR, notifies Slack on failure.
-#
-# Callers handle triggers (issues opened/labeled) and pass issue data directly.
+# Implements a GitHub issue with Claude Code: branches with a claude/ prefix,
+# opens a PR, alerts Slack on failure. Callers handle triggers and pass issue data.
 
 on:
   workflow_call:
@@ -83,9 +81,8 @@ on:
         required: false
       AUTH_TEST_CREDENTIALS:
         required: false
-      # Optional: when set, a fresh app token is minted to open the PR (avoids a
-      # 401 from reusing the Claude action's OIDC token, and triggers downstream
-      # CI on the PR). Without it, the PR is opened with the default job token.
+      # When set, a fresh app token opens the PR (avoids a 401 and triggers CI on
+      # the PR). Without it, the PR uses the default job token.
       CI_GITHUB_APP_ID:
         required: false
       CI_GITHUB_APP_PRIVATE_KEY:
@@ -127,8 +124,8 @@ jobs:
     runs-on: ubuntu-latest
     container: ${{ inputs.container || '' }}
     env:
-      # Whether the caller wired up the CI app for fresh PR-creation tokens.
-      # Gated here (not in a step `if`) because secrets aren't readable in `if`.
+      # Is the CI app configured? Set here, not in a step `if`, since secrets
+      # aren't readable in `if`.
       HAS_CI_APP: ${{ secrets.CI_GITHUB_APP_ID != '' && secrets.CI_GITHUB_APP_PRIVATE_KEY != '' }}
     steps:
       - name: Comment on issue that implementation is starting
@@ -192,7 +189,7 @@ jobs:
             - Add or update unit tests for changed behavior.
             - Branch name MUST start with `claude/` prefix.
             - Before creating a branch, committing, or pushing, run `git status --porcelain`. If the output is empty, do NOT create a branch — comment on issue #${{ inputs.issue_number }} explaining why no changes were needed and stop.
-            - To open the PR: commit, push the `claude/` branch, then write the PR title to /tmp/pr-title.txt (include the issue reference, e.g. `feat: implement feature (#${{ inputs.issue_number }})`) and the PR body to /tmp/pr-body.txt (link the issue with `Closes #${{ inputs.issue_number }}`). Do NOT run `gh pr create` — the workflow opens the PR from those files.
+            - When you open the PR (see "Opening a PR" in your instructions), the title should include the issue reference, e.g. `feat: implement feature (#${{ inputs.issue_number }})`, and the body must link the issue with `Closes #${{ inputs.issue_number }}`.
             ${{ inputs.issue_author != '' && format('- In /tmp/pr-body.txt, include a "DRI" section: **@{0}** is the responsible engineer for this PR.', inputs.issue_author) || '' }}
             ${{ inputs.extra_prompt }}
           claude_args: |
@@ -206,21 +203,16 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: claude-execution-output
-          # Use the action's output path; fall back to the temp location
-          # (container-safe). A blank line is skipped if the output is empty.
+          # Action's output path, with a container-safe temp fallback.
           path: |
             ${{ steps.claude.outputs.execution_file }}
             ${{ runner.temp }}/claude-execution-output.json
           if-no-files-found: warn
           retention-days: 7
 
-      # Mint a fresh app token for opening the PR. Reusing the token the Claude
-      # action minted via OIDC (steps.claude.outputs.github_token) is unreliable:
-      # after a long agent run it can be rejected by the API with a 401 "Bad
-      # credentials". A token minted here is fresh, and — being an app token, not
-      # the default GITHUB_TOKEN — the PR it opens still triggers downstream CI.
-      # Skipped when the caller hasn't configured the CI app (see secrets); the
-      # Open PR step then falls back to the job token.
+      # Fresh app token for the PR: a token reused after the long agent run can
+      # 401, and an app token (unlike GITHUB_TOKEN) lets the new PR trigger CI.
+      # Skipped if the caller didn't configure the CI app; Open PR then uses the job token.
       - name: Generate token for PR creation
         id: pr-token
         if: steps.claude.outcome == 'success' && env.HAS_CI_APP == 'true'
@@ -230,10 +222,8 @@ jobs:
           app-id: ${{ secrets.CI_GITHUB_APP_ID }}
           private-key: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
 
-      # Open the PR deterministically: the agent pushes the branch and writes
-      # the title/body to /tmp; it never runs `gh pr create` (the Bash matcher
-      # rejects multi-line args). Uses github-script (not gh) so it works in
-      # caller-provided containers where gh is not installed.
+      # The agent pushes the branch and writes title/body to /tmp; we open the PR
+      # via github-script (not gh) so it works in containers without gh installed.
       - name: Open PR
         id: open-pr
         if: steps.claude.outcome == 'success'
@@ -241,8 +231,7 @@ jobs:
         env:
           BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
         with:
-          # Fresh app token when the CI app is configured (see "Generate token
-          # for PR creation"); otherwise the default job token.
+          # Fresh app token when the CI app is configured (see above); else job token.
           github-token: ${{ steps.pr-token.outputs.token || github.token }}
           script: |
             const fs = require('fs');
@@ -250,10 +239,13 @@ jobs:
               core.info('No /tmp/pr-title.txt: agent did not request a PR.');
               return;
             }
-            // The action only sets branch_name when it manages the branch; here
-            // the agent creates it (git checkout -b claude/...), so fall back to
-            // the HEAD the agent left checked out.
-            let branch = process.env.BRANCH_NAME;
+            // The agent creates its own branch, so prefer the name it recorded
+            // in /tmp/pr-branch.txt, then branch_name, then the checked-out HEAD.
+            let branch = fs.existsSync('/tmp/pr-branch.txt')
+              ? fs.readFileSync('/tmp/pr-branch.txt', 'utf8').trim() : '';
+            if (!branch) {
+              branch = process.env.BRANCH_NAME;
+            }
             if (!branch) {
               const head = await exec.getExecOutput(
                 'git', ['rev-parse', '--abbrev-ref', 'HEAD'],
@@ -261,7 +253,7 @@ jobs:
               branch = head.stdout.trim();
             }
             if (!branch || branch === 'HEAD') {
-              core.setFailed('Could not determine the PR branch: no branch_name output and git HEAD is detached.');
+              core.setFailed('Could not determine the PR branch: no /tmp/pr-branch.txt, no branch_name output, and git HEAD is detached.');
               return;
             }
             const title = fs.readFileSync('/tmp/pr-title.txt', 'utf8').trim();

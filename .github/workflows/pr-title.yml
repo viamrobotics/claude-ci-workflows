@@ -1,9 +1,8 @@
 name: PR Title
 
 # Squash-merge uses the PR title as the commit subject, and release-please
-# classifies releases from that subject's conventional-commit type. A
-# non-conventional title (e.g. one auto-derived from a branch name) silently
-# skips the release, so enforce the convention before merge.
+# classifies the release from its conventional-commit type. Enforce the
+# convention before merge so a non-conventional title can't skip the release.
 
 on:
   pull_request:

@@ -1,13 +1,9 @@
 name: Claude Dependabot Sweep Rebase (Reusable)
 
-# On-demand rebase of a Dependabot sweep PR. Triggered by an `@claude rebase`
-# comment on the PR. Mirrors the auto-rebase path that runs inside the sweep
-# workflow, but operates against a single PR.
-#
-# This file is the thin orchestrator: it validates the trigger, resolves PR
-# info, and delegates to claude-dependabot-sweep-rebase-job.yml.
-#
-# Callers handle the issue_comment trigger and pass configuration.
+# On-demand rebase of a single Dependabot sweep PR, triggered by an
+# `@claude rebase` comment. Thin orchestrator: validates the trigger, resolves
+# PR info, and delegates to claude-dependabot-sweep-rebase-job.yml. Callers
+# handle the issue_comment trigger.
 
 on:
   workflow_call:
@@ -189,9 +185,8 @@ jobs:
   rebase:
     needs: resolve-pr
     if: needs.resolve-pr.outputs.skip != 'true'
-    # Local reference: resolves to this repo at the same ref the caller pinned
-    # for the rebase workflow, so the nested rebase-job always travels with the
-    # rebase version (no floating @main, no SHA to bump each release).
+    # Local ref: resolves to this repo at the caller's pinned rebase version, so
+    # the nested job travels with it (no floating @main, no SHA to bump).
     uses: ./.github/workflows/claude-dependabot-sweep-rebase-job.yml
     with:
       package: ${{ needs.resolve-pr.outputs.package }}

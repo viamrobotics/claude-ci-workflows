@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.2](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.1...v2.2.2) (2026-06-05)
+
+
+### Bug Fixes
+
+* use local ./ reference for nested rebase-job (was floating [@main](https://github.com/main)) ([#119](https://github.com/viamrobotics/claude-ci-workflows/issues/119)) ([133ea4c](https://github.com/viamrobotics/claude-ci-workflows/commit/133ea4c0e90a912f06fc396232336c233993917e))
+
 ## [2.2.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.0...v2.2.1) (2026-06-04)
 
 

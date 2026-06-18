@@ -40,7 +40,52 @@ runs:
 
           core.info(`Approvals: ${approvals}/${required}`);
 
-          if (approvals < required) {
+          if (approvals >= required) {
+            // Approvals are now sufficient. When this run was triggered by a
+            // review, the pull_request-triggered run for this same commit may
+            // still be red: it executed at push time, before the approvals
+            // existed. Branch protection pins the required "check-approvals"
+            // status to that earlier run, so a passing review-triggered run
+            // does not turn the gate green on its own — a human has to re-run
+            // the failed pull_request run by hand. Do that automatically here.
+            if (context.eventName === 'pull_request_review') {
+              const headSha = context.payload.pull_request.head.sha;
+              try {
+                const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  event: 'pull_request',
+                  head_sha: headSha,
+                  per_page: 100,
+                });
+                const stale = runs.workflow_runs.filter(run =>
+                  run.name === context.workflow &&
+                  run.id !== context.runId &&
+                  run.status === 'completed' &&
+                  run.conclusion !== 'success'
+                );
+                if (stale.length === 0) {
+                  core.info('No stale pull_request run to refresh for this commit');
+                }
+                for (const run of stale) {
+                  core.info(`Re-running stale run ${run.id} to refresh the required status`);
+                  await github.rest.actions.reRunWorkflowFailedJobs({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: run.id,
+                  });
+                }
+              } catch (err) {
+                // Re-running a workflow needs `actions: write`. If the caller
+                // didn't grant it, don't fail the check — fall back to the
+                // prior behavior where the failed run is re-run manually.
+                core.warning(
+                  `Could not refresh the stale pull_request run: ${err.message}. ` +
+                  'Grant the caller workflow `actions: write` to enable automatic refresh.'
+                );
+              }
+            }
+          } else {
             // Fetch the PR to get the assignee
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,

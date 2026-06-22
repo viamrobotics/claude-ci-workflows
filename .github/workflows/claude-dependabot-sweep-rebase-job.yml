@@ -105,7 +105,7 @@ jobs:
       # Shared composite, also used by the sweep's auto-rebase matrix job. This
       # reusable workflow is the entry point for the comment-triggered single-PR path.
       - name: Rebase ${{ inputs.package }}
-        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@46be59920919b2aeb1c9b14db8ce8d7a761cbeac
+        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@6f3517db76867a5cd323e8f7e7d1459ce6b4d167
         with:
           package: ${{ inputs.package }}
           severity: ${{ inputs.severity }}

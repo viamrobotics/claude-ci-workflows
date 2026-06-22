@@ -556,22 +556,16 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
 
 
-  # Auto-rebase: sweep PRs that develop merge conflicts go to the rebase-job,
-  # which replays the manifest patch onto the default branch and falls back to
-  # Claude only if the manifest moved.
+  # Auto-rebase sweep PRs that develop merge conflicts: replay the manifest patch
+  # onto the default branch, falling back to Claude only if the manifest moved.
   rebase-dependencies:
     needs: collect-alerts
     if: needs.collect-alerts.outputs.rebase_matrix != '{"include":[]}' && needs.collect-alerts.outputs.rebase_matrix != ''
     strategy:
       matrix: ${{ fromJSON(needs.collect-alerts.outputs.rebase_matrix) }}
       fail-fast: false
-    # A normal `runs-on` matrix job — NOT a reusable-workflow `uses:` job.
-    # GitHub validates a `needs`-derived `strategy.matrix` on a `uses:` job at
-    # startup ("matrix must define at least one vector") and fails the whole run
-    # with zero jobs before any `if:` is evaluated, which is what broke every
-    # cross-repo caller after the auto-rebase feature landed. A normal matrix
-    # job defers matrix evaluation to runtime. The rebase logic is shared with
-    # the comment-triggered single-PR path via the composite action below.
+    # Must be a normal matrix job, not a `uses:` job: an empty `needs`-derived
+    # matrix on a `uses:` job fails the whole run at startup. Logic is in the composite.
     permissions:
       contents: write
       pull-requests: write

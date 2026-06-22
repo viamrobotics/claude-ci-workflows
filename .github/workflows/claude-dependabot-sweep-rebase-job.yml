@@ -102,13 +102,8 @@ jobs:
     runs-on: ubuntu-latest
     container: ${{ inputs.container || '' }}
     steps:
-      # The rebase logic lives in a composite action so it can be shared with
-      # the sweep's auto-rebase fan-out, which must run from a normal matrix job
-      # (a reusable-workflow `uses:` job cannot take a `needs`-derived matrix —
-      # it fails the whole run at startup). This reusable workflow remains the
-      # entry point for the comment-triggered single-PR path
-      # (claude-dependabot-sweep-rebase.yml); its `workflow_call` interface is
-      # unchanged, so that caller needs no edits.
+      # Shared composite, also used by the sweep's auto-rebase matrix job. This
+      # reusable workflow is the entry point for the comment-triggered single-PR path.
       - name: Rebase ${{ inputs.package }}
         uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@46be59920919b2aeb1c9b14db8ce8d7a761cbeac
         with:

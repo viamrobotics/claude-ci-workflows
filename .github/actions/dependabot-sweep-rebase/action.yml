@@ -5,13 +5,9 @@ description: >-
   Claude only if the patch no longer applies. Then commit, force-push, comment,
   or close the PR as a no-op.
 
-# Implemented as a composite action (not a reusable workflow) so it can run as a
-# step inside a normal `runs-on` matrix job. The sweep's auto-rebase fan-out
-# derives its matrix from a `needs` output; GitHub validates that matrix at
-# startup for reusable-workflow (`uses:`) jobs and fails the whole run with zero
-# jobs when it is empty. A normal matrix job defers that evaluation to runtime,
-# which is the bug this shape fixes. Composite actions cannot read `secrets`, so
-# every secret is passed in as an input.
+# Composite, not a reusable workflow: it must run as a step inside a normal matrix
+# job, because a `uses:` job's empty `needs`-derived matrix fails the whole run at
+# startup. Secrets are passed as inputs (composite actions can't read `secrets`).
 
 inputs:
   # --- PR identification (required) ---

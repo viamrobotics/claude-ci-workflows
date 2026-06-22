@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.4](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.3...v2.2.4) (2026-06-22)
+
+
+### Bug Fixes
+
+* refresh stale check-approvals status on review ([#123](https://github.com/viamrobotics/claude-ci-workflows/issues/123)) ([27af383](https://github.com/viamrobotics/claude-ci-workflows/commit/27af38367cf49b2e2a55a37fdd6cda585dd09a23))
+* **sweep:** re-pin rebase composite to its merged main SHA ([#126](https://github.com/viamrobotics/claude-ci-workflows/issues/126)) ([dd7914f](https://github.com/viamrobotics/claude-ci-workflows/commit/dd7914f3ed6c9536906b0f06046592323e343565))
+* **sweep:** run auto-rebase from a normal matrix job via composite action ([#125](https://github.com/viamrobotics/claude-ci-workflows/issues/125)) ([6f3517d](https://github.com/viamrobotics/claude-ci-workflows/commit/6f3517db76867a5cd323e8f7e7d1459ce6b4d167))
+
 ## [2.2.3](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.2...v2.2.3) (2026-06-16)
 
 

@@ -556,31 +556,42 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
 
 
-  # Auto-rebase: sweep PRs that develop merge conflicts go to the rebase-job,
-  # which replays the manifest patch onto the default branch and falls back to
-  # Claude only if the manifest moved.
+  # Auto-rebase sweep PRs that develop merge conflicts: replay the manifest patch
+  # onto the default branch, falling back to Claude only if the manifest moved.
   rebase-dependencies:
     needs: collect-alerts
     if: needs.collect-alerts.outputs.rebase_matrix != '{"include":[]}' && needs.collect-alerts.outputs.rebase_matrix != ''
     strategy:
       matrix: ${{ fromJSON(needs.collect-alerts.outputs.rebase_matrix) }}
       fail-fast: false
-    # Local ref: resolves to this repo at the caller's pinned sweep version, so
-    # the nested job travels with it (no floating @main, no SHA to bump).
-    uses: ./.github/workflows/claude-dependabot-sweep-rebase-job.yml
-    with:
-      package: ${{ matrix.package }}
-      severity: ${{ matrix.severity }}
-      issue_number: ${{ matrix.issue_number }}
-      pr_number: ${{ matrix.pr_number }}
-      head_ref: ${{ matrix.head_ref }}
-      head_sha: ${{ matrix.head_sha }}
-      install_command: ${{ inputs.install_command }}
-      extra_prompt: ${{ inputs.extra_prompt }}
-      extra_system_prompt: ${{ inputs.extra_system_prompt }}
-      model: ${{ inputs.model }}
-      max_turns: ${{ inputs.max_turns }}
-      show_full_output: ${{ inputs.show_full_output }}
-      allowed_tools: ${{ inputs.allowed_tools }}
-      container: ${{ inputs.container }}
-    secrets: inherit
+    # Must be a normal matrix job, not a `uses:` job: an empty `needs`-derived
+    # matrix on a `uses:` job fails the whole run at startup. Logic is in the composite.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    runs-on: ubuntu-latest
+    container: ${{ inputs.container || '' }}
+    steps:
+      - name: Rebase ${{ matrix.package }}
+        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@46be59920919b2aeb1c9b14db8ce8d7a761cbeac
+        with:
+          package: ${{ matrix.package }}
+          severity: ${{ matrix.severity }}
+          issue_number: ${{ matrix.issue_number }}
+          pr_number: ${{ matrix.pr_number }}
+          head_ref: ${{ matrix.head_ref }}
+          head_sha: ${{ matrix.head_sha }}
+          allowed_tools: ${{ inputs.allowed_tools }}
+          install_command: ${{ inputs.install_command }}
+          extra_prompt: ${{ inputs.extra_prompt }}
+          extra_system_prompt: ${{ inputs.extra_system_prompt }}
+          model: ${{ inputs.model }}
+          max_turns: ${{ inputs.max_turns }}
+          show_full_output: ${{ inputs.show_full_output }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          app_id: ${{ secrets.CI_GITHUB_APP_ID }}
+          app_private_key: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
+          slack_webhook_url: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
+          auth_test_credentials: ${{ secrets.AUTH_TEST_CREDENTIALS }}

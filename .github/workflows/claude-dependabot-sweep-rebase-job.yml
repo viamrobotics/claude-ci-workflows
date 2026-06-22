@@ -110,7 +110,7 @@ jobs:
       # (claude-dependabot-sweep-rebase.yml); its `workflow_call` interface is
       # unchanged, so that caller needs no edits.
       - name: Rebase ${{ inputs.package }}
-        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@PLACEHOLDER_SHA
+        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@46be59920919b2aeb1c9b14db8ce8d7a761cbeac
         with:
           package: ${{ inputs.package }}
           severity: ${{ inputs.severity }}

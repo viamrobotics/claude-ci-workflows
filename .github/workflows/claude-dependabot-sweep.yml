@@ -581,7 +581,7 @@ jobs:
     container: ${{ inputs.container || '' }}
     steps:
       - name: Rebase ${{ matrix.package }}
-        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@PLACEHOLDER_SHA
+        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@46be59920919b2aeb1c9b14db8ce8d7a761cbeac
         with:
           package: ${{ matrix.package }}
           severity: ${{ matrix.severity }}

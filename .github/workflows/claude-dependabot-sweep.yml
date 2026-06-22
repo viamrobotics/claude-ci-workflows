@@ -565,22 +565,39 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.collect-alerts.outputs.rebase_matrix) }}
       fail-fast: false
-    # Local ref: resolves to this repo at the caller's pinned sweep version, so
-    # the nested job travels with it (no floating @main, no SHA to bump).
-    uses: ./.github/workflows/claude-dependabot-sweep-rebase-job.yml
-    with:
-      package: ${{ matrix.package }}
-      severity: ${{ matrix.severity }}
-      issue_number: ${{ matrix.issue_number }}
-      pr_number: ${{ matrix.pr_number }}
-      head_ref: ${{ matrix.head_ref }}
-      head_sha: ${{ matrix.head_sha }}
-      install_command: ${{ inputs.install_command }}
-      extra_prompt: ${{ inputs.extra_prompt }}
-      extra_system_prompt: ${{ inputs.extra_system_prompt }}
-      model: ${{ inputs.model }}
-      max_turns: ${{ inputs.max_turns }}
-      show_full_output: ${{ inputs.show_full_output }}
-      allowed_tools: ${{ inputs.allowed_tools }}
-      container: ${{ inputs.container }}
-    secrets: inherit
+    # A normal `runs-on` matrix job — NOT a reusable-workflow `uses:` job.
+    # GitHub validates a `needs`-derived `strategy.matrix` on a `uses:` job at
+    # startup ("matrix must define at least one vector") and fails the whole run
+    # with zero jobs before any `if:` is evaluated, which is what broke every
+    # cross-repo caller after the auto-rebase feature landed. A normal matrix
+    # job defers matrix evaluation to runtime. The rebase logic is shared with
+    # the comment-triggered single-PR path via the composite action below.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    runs-on: ubuntu-latest
+    container: ${{ inputs.container || '' }}
+    steps:
+      - name: Rebase ${{ matrix.package }}
+        uses: viamrobotics/claude-ci-workflows/.github/actions/dependabot-sweep-rebase@PLACEHOLDER_SHA
+        with:
+          package: ${{ matrix.package }}
+          severity: ${{ matrix.severity }}
+          issue_number: ${{ matrix.issue_number }}
+          pr_number: ${{ matrix.pr_number }}
+          head_ref: ${{ matrix.head_ref }}
+          head_sha: ${{ matrix.head_sha }}
+          allowed_tools: ${{ inputs.allowed_tools }}
+          install_command: ${{ inputs.install_command }}
+          extra_prompt: ${{ inputs.extra_prompt }}
+          extra_system_prompt: ${{ inputs.extra_system_prompt }}
+          model: ${{ inputs.model }}
+          max_turns: ${{ inputs.max_turns }}
+          show_full_output: ${{ inputs.show_full_output }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          app_id: ${{ secrets.CI_GITHUB_APP_ID }}
+          app_private_key: ${{ secrets.CI_GITHUB_APP_PRIVATE_KEY }}
+          slack_webhook_url: ${{ secrets.SLACK_AI_WORKFLOW_ALERT_WEBHOOK_URL }}
+          auth_test_credentials: ${{ secrets.AUTH_TEST_CREDENTIALS }}

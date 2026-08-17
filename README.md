@@ -89,6 +89,7 @@ Scheduled cron / manual dispatch
 | Input | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `install_command` | string | no | `''` | Dependency install command |
+| `install_mise` | boolean | no | `false` | Install [mise](https://mise.jdx.dev/) (and the tools in the repo's mise config) after checkout. Supported by jira, ci-fix, and pr-assistant. |
 | `allowed_tools` | string | yes | - | Claude Code Action allowedTools |
 | `model` | string | no | varies | Claude model ID |
 | `max_turns` | number | no | varies | Max conversation turns |

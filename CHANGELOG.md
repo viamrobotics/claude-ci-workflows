@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.3.0...v2.4.0) (2026-08-25)
+
+
+### Features
+
+* **ci-fix:** require an opt-in label and a re-run before Claude commits ([#130](https://github.com/viamrobotics/claude-ci-workflows/issues/130)) ([d907f12](https://github.com/viamrobotics/claude-ci-workflows/commit/d907f12fcbb056c71bf78893311ea983b0738f23))
+
 ## [2.2.4](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.2.3...v2.2.4) (2026-06-22)
 
 

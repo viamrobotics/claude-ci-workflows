@@ -89,6 +89,11 @@ on:
         required: false
         type: string
         default: ''
+      pr_labels:
+        description: 'Comma-separated labels to apply to the PR this workflow opens.'
+        required: false
+        type: string
+        default: ''
       container:
         description: 'Container image for the implement job (e.g., "ubuntu:22.04"). Leave empty for bare runner.'
         required: false
@@ -372,6 +377,7 @@ jobs:
         env:
           BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
           TICKET_ID: ${{ inputs.ticket_id }}
+          PR_LABELS: ${{ inputs.pr_labels }}
         with:
           # Fresh app token (see above); job token only if minting was skipped.
           github-token: ${{ steps.pr-token.outputs.token || github.token }}
@@ -419,6 +425,13 @@ jobs:
             });
             const pr = existing.data[0]
               || (await github.rest.pulls.create({ owner, repo, head: branch, base, title, body })).data;
+            const prLabels = (process.env.PR_LABELS || '')
+              .split(',').map(l => l.trim()).filter(Boolean);
+            if (prLabels.length) {
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: pr.number, labels: prLabels,
+              });
+            }
             core.setOutput('pr_url', pr.html_url);
             core.setOutput('pr_number', String(pr.number));
             core.info(`PR: ${pr.html_url}`);

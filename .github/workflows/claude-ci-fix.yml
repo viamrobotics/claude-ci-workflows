@@ -69,6 +69,21 @@ on:
         required: false
         type: string
         default: 'viamrobotics'
+      required_label:
+        description: 'Label a PR must carry to opt into automated fixes. Empty means every PR on a matching branch qualifies.'
+        required: false
+        type: string
+        default: ''
+      rerun_failed_jobs_first:
+        description: 'Re-run the failed jobs once and fix only if they fail again, so flakes cost no code change.'
+        required: false
+        type: boolean
+        default: false
+      stand_down_on_human_review:
+        description: 'Skip the fix once a human has reviewed the PR or left an inline comment on it.'
+        required: false
+        type: boolean
+        default: true
       container:
         description: 'Container image for the job (e.g., "ubuntu:22.04"). Leave empty for bare runner.'
         required: false
@@ -90,7 +105,7 @@ jobs:
   check-pr:
     if: github.repository_owner == inputs.repository_owner
     permissions:
-      actions: read
+      actions: write
       contents: read
       issues: write
       pull-requests: write
@@ -98,6 +113,7 @@ jobs:
     outputs:
       should_fix: ${{ steps.check.outputs.should_fix }}
       max_reached: ${{ steps.check.outputs.max_reached }}
+      rerun: ${{ steps.check.outputs.rerun }}
       pr_number: ${{ steps.check.outputs.pr_number }}
       attempt: ${{ steps.check.outputs.attempt }}
       branch: ${{ steps.check.outputs.branch }}
@@ -108,6 +124,9 @@ jobs:
         env:
           INPUT_BRANCH: ${{ inputs.branch }}
           MAX_ATTEMPTS: ${{ inputs.max_fix_attempts }}
+          REQUIRED_LABEL: ${{ inputs.required_label }}
+          RERUN_FIRST: ${{ inputs.rerun_failed_jobs_first }}
+          STAND_DOWN: ${{ inputs.stand_down_on_human_review }}
         with:
           script: |
             const branch = process.env.INPUT_BRANCH;
@@ -126,6 +145,14 @@ jobs:
             }
 
             const pr = pulls[0];
+            const labels = pr.labels.map(l => l.name);
+
+            const requiredLabel = (process.env.REQUIRED_LABEL || '').trim();
+            if (requiredLabel && !labels.includes(requiredLabel)) {
+              core.info(`PR #${pr.number}: not labelled "${requiredLabel}", skipping`);
+              core.setOutput('should_fix', 'false');
+              return;
+            }
 
             // Only fix CI if the latest commit is from Claude
             const { data: latestCommit } = await github.rest.repos.getCommit({
@@ -136,12 +163,39 @@ jobs:
             const author = latestCommit.author?.login || latestCommit.commit?.author?.name || '';
             const isClaudeCommit = author === 'claude[bot]' || author.toLowerCase().includes('claude');
             if (!isClaudeCommit) {
-              core.info(`PR #${pr.number}: latest commit by "${author}", not Claude — skipping`);
+              core.info(`PR #${pr.number}: latest commit by "${author}", not Claude, skipping`);
               core.setOutput('should_fix', 'false');
               return;
             }
 
-            const labels = pr.labels.map(l => l.name);
+            // A reviewer's comments go stale against a diff that moves under them.
+            if (process.env.STAND_DOWN === 'true') {
+              const [reviews, inlineComments] = await Promise.all([
+                github.rest.pulls.listReviews({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  pull_number: pr.number, per_page: 100
+                }),
+                github.rest.pulls.listReviewComments({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  pull_number: pr.number, per_page: 100
+                }),
+              ]);
+              const human = [...reviews.data, ...inlineComments.data]
+                .find(item => item.user && item.user.type !== 'Bot');
+              if (human) {
+                core.info(`PR #${pr.number}: ${human.user.login} is reviewing, skipping`);
+                core.setOutput('should_fix', 'false');
+                return;
+              }
+            }
+
+            if (process.env.RERUN_FIRST === 'true' && !labels.includes('claude-rerun')) {
+              core.info(`PR #${pr.number}: re-running failed jobs before editing any code`);
+              core.setOutput('should_fix', 'false');
+              core.setOutput('rerun', 'true');
+              core.setOutput('pr_number', String(pr.number));
+              return;
+            }
 
             if (labels.includes(`claude-fix-${maxAttempts}`)) {
               core.info(`PR #${pr.number}: max fix attempts (${maxAttempts}) reached, skipping`);
@@ -175,6 +229,30 @@ jobs:
               issue_number: parseInt('${{ steps.check.outputs.pr_number }}'),
               labels: ['claude-fix-${{ steps.check.outputs.attempt }}']
             });
+
+      - name: Label the re-run attempt
+        if: steps.check.outputs.rerun == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ steps.check.outputs.pr_number }}'),
+              labels: ['claude-rerun']
+            });
+
+      # Labelling precedes the request so a rejected re-run cannot leave the PR
+      # eligible for another one on every later failure.
+      - name: Re-run failed jobs
+        if: steps.check.outputs.rerun == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          gh run rerun "$RUN_ID" --failed ||
+            echo "Re-run request failed; the next failure on this PR goes straight to a fix."
 
       # Fetch logs on a bare runner (not the caller's container) so gh is always
       # available; pass them via artifact to dodge ARG_MAX limits on job outputs.

@@ -6,7 +6,7 @@ Reusable GitHub Actions workflows for Claude-powered CI/CD automation. These wor
 
 | Workflow | Purpose |
 |----------|---------|
-| `claude-ci-fix.yml` | Auto-fix CI failures on `claude/*` branch PRs (label-based retry, configurable max attempts) |
+| `claude-ci-fix.yml` | Auto-fix CI failures on `claude/*` branch PRs (opt-in label, re-run before fixing, label-based retry) |
 | `claude-jira.yml` | Implement Jira tickets via Claude, create PR on `claude/*` branch |
 | `claude-on-demand-review.yml` | Read-only review triggered by `@claude` mention in PR comments |
 | `claude-pr-fix.yml` | Fix a PR when triggered by `@claude-fix` mention in PR comments (pushes code) |
@@ -52,6 +52,12 @@ Caller workflows handle **triggers** (e.g., `workflow_run`, `repository_dispatch
    - Set `install_command` and `allowed_tools` for your project
    - Update `extra_prompt` / `extra_review_instructions` for project-specific caveats
    - Set `team_mention` for ci-fix to the appropriate GitHub team
+   - Set `required_label` for ci-fix, and have whatever opens the PR apply that label
+
+A branch name is a convention anyone can adopt, so `claude/*` alone does not authorise a
+bot to commit to someone's PR. `required_label` is the consent: the PR carries the label
+or the fixer stands down. It also stands down once a human reviews the PR, and it re-runs
+the failed jobs once before editing code, so a flake costs a re-run instead of a commit.
 
 ### Workflow flow
 
@@ -60,6 +66,8 @@ PR opened on claude/* branch
   --> Repo CI runs
        |
        +--> [CI fails]  --> claude-ci-fix.yml (auto-fix, configurable retries)
+                            requires: PR carries `required_label`, HEAD commit is
+                            Claude's, no human has reviewed, re-run failed again
 
 @claude mention in PR comment
   --> claude-on-demand-review.yml (read-only review)
@@ -194,6 +202,8 @@ jobs:
       branch: ${{ github.event.workflow_run.head_branch }}
       install_command: npm ci  # your install command
       team_mention: '@viamrobotics/your-team'
+      required_label: claude-autofix
+      rerun_failed_jobs_first: true
       allowed_tools: 'Edit,Read,Write,Glob,Grep,Bash(git config *),Bash(git add *),Bash(git commit *),Bash(git push *),Bash(git status*),Bash(git diff*),Bash(git log*),Bash(git checkout *),Bash(git branch *),Bash(git rev-parse *),Bash(git fetch *)'
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

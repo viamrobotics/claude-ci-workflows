@@ -38,7 +38,12 @@ on:
         description: 'Claude model to use'
         required: false
         type: string
-        default: 'claude-sonnet-4-6'
+        default: 'claude-opus-5-5'
+      effort:
+        description: 'Reasoning effort level (low, medium, high, xhigh, max)'
+        required: false
+        type: string
+        default: 'high'
       max_turns:
         description: 'Max conversation turns'
         required: false
@@ -248,7 +253,7 @@ jobs:
         run: .ci-prompts/scripts/assemble-system-prompt.sh
 
       - id: claude
-        uses: anthropics/claude-code-action@26ddc358fe3befff50c5ec2f80304c90c763f6f8 # v1.0.90
+        uses: anthropics/claude-code-action@8041f1d17e0e7d2f2cfe35002962e9f26237c0bb # v1.0.263
         env:
           AUTH_TEST_CREDENTIALS: ${{ secrets.AUTH_TEST_CREDENTIALS }}
         with:
@@ -323,6 +328,7 @@ jobs:
             ${{ inputs.extra_review_instructions }}
           claude_args: |
             --model ${{ inputs.model }}
+            --effort ${{ inputs.effort }}
             --max-turns ${{ inputs.max_turns }}
             --allowedTools "${{ inputs.allowed_tools }}"
 

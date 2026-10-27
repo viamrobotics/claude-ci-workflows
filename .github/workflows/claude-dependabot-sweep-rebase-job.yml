@@ -61,7 +61,12 @@ on:
         description: 'Claude model to use for the fallback'
         required: false
         type: string
-        default: 'claude-opus-4-6'
+        default: 'claude-opus-5-5'
+      effort:
+        description: 'Reasoning effort level for the fallback (low, medium, high, xhigh, max)'
+        required: false
+        type: string
+        default: 'high'
       max_turns:
         description: 'Max conversation turns for the Claude fallback'
         required: false
@@ -118,6 +123,7 @@ jobs:
           extra_prompt: ${{ inputs.extra_prompt }}
           extra_system_prompt: ${{ inputs.extra_system_prompt }}
           model: ${{ inputs.model }}
+          effort: ${{ inputs.effort }}
           max_turns: ${{ inputs.max_turns }}
           show_full_output: ${{ inputs.show_full_output }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

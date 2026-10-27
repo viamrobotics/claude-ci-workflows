@@ -337,6 +337,9 @@ jobs:
           EXTRA_SYSTEM_PROMPT: ${{ inputs.extra_system_prompt }}
         run: .ci-prompts/scripts/assemble-system-prompt.sh
 
+      - name: Assemble CI settings
+        run: .ci-prompts/scripts/assemble-ci-settings.sh
+
       - id: claude
         uses: anthropics/claude-code-action@8041f1d17e0e7d2f2cfe35002962e9f26237c0bb # v1.0.263
         env:
@@ -345,7 +348,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: ${{ inputs.show_full_output }}
           display_report: true
-          settings: .claude/settings.ci.json
+          settings: ${{ env.CLAUDE_CI_SETTINGS }}
           allowed_bots: "claude[bot]"
           prompt: |
             CI failed on PR #${{ needs.check-pr.outputs.pr_number }} (fix attempt ${{ needs.check-pr.outputs.attempt }} of ${{ inputs.max_fix_attempts }}).

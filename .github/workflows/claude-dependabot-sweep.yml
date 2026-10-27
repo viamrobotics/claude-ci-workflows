@@ -403,6 +403,10 @@ jobs:
             echo "  - Example (npm package.json): add to the \"overrides\" or \"resolutions\" field with a comment in the PR body explaining the override."
             echo "  - Flag this clearly in the PR description so reviewers know it needs future cleanup."
             echo ""
+            echo "## CI Run Boundary"
+            echo "- This run ends the moment you stop. Nothing wakes you again, so never end a turn waiting on work you started: no background commands, no Monitor watch."
+            echo "- Run every command in the foreground. If a command would outlast the job, do not start it: say what you could not verify, and finish with what you have."
+            echo ""
             echo "## Git Commit Rules"
             echo "- Run git add and git commit as separate commands — never chain with &&."
             echo "- NEVER use HEREDOC or multi-line strings in git commit commands — write the message to /tmp/commit-msg.txt using the Write tool, then run: git commit --file /tmp/commit-msg.txt"
@@ -418,6 +422,19 @@ jobs:
             echo "__CI_PROMPT_EOF__"
           } >> "$GITHUB_ENV"
 
+      - name: Checkout CI scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: viamrobotics/claude-ci-workflows
+          ref: main
+          path: .ci-prompts
+          sparse-checkout: |
+            scripts/
+          sparse-checkout-cone-mode: false
+
+      - name: Assemble CI settings
+        run: .ci-prompts/scripts/assemble-ci-settings.sh
+
       - id: claude
         uses: anthropics/claude-code-action@8041f1d17e0e7d2f2cfe35002962e9f26237c0bb # v1.0.263
         env:
@@ -426,7 +443,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: ${{ inputs.show_full_output }}
           display_report: true
-          settings: .claude/settings.ci.json
+          settings: ${{ env.CLAUDE_CI_SETTINGS }}
           prompt: |
             You are fixing Dependabot security vulnerabilities for the package `${{ matrix.package }}`.
             This is tracked in issue #${{ matrix.issue_number }}.

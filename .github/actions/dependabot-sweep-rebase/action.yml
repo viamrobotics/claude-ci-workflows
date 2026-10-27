@@ -49,7 +49,11 @@ inputs:
   model:
     description: Claude model to use for the fallback
     required: false
-    default: claude-opus-4-6
+    default: claude-opus-5-5
+  effort:
+    description: Reasoning effort level for the Claude fallback (low, medium, high, xhigh, max)
+    required: false
+    default: high
   max_turns:
     description: Max conversation turns for the Claude fallback
     required: false
@@ -257,7 +261,7 @@ runs:
     - name: Run Claude (manifest conflict fallback)
       id: claude
       if: steps.rebase-attempt.outputs.result == 'needs-claude'
-      uses: anthropics/claude-code-action@26ddc358fe3befff50c5ec2f80304c90c763f6f8 # v1.0.90
+      uses: anthropics/claude-code-action@8041f1d17e0e7d2f2cfe35002962e9f26237c0bb # v1.0.263
       env:
         AUTH_TEST_CREDENTIALS: ${{ inputs.auth_test_credentials }}
       with:
@@ -300,6 +304,7 @@ runs:
           ${{ inputs.extra_prompt }}
         claude_args: |
           --model ${{ inputs.model }}
+          --effort ${{ inputs.effort }}
           --max-turns ${{ inputs.max_turns }}
           --allowedTools "${{ inputs.allowed_tools }}"
 

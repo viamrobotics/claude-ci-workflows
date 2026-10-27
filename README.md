@@ -99,7 +99,8 @@ Scheduled cron / manual dispatch
 | `install_command` | string | no | `''` | Dependency install command |
 | `install_mise` | boolean | no | `false` | Install [mise](https://mise.jdx.dev/) (and the tools in the repo's mise config) after checkout. Supported by jira, ci-fix, and pr-assistant. |
 | `allowed_tools` | string | yes | - | Claude Code Action allowedTools |
-| `model` | string | no | varies | Claude model ID |
+| `model` | string | no | `claude-opus-5-5` | Claude model ID |
+| `effort` | string | no | `high` | Reasoning effort: `low`, `medium`, `high`, `xhigh`, `max` |
 | `max_turns` | number | no | varies | Max conversation turns |
 | `repository_owner` | string | no | `viamrobotics` | Guard condition |
 | `extra_prompt` | string | no | `''` | Extra instructions appended to the Claude prompt |

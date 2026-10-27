@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.4.0...v2.5.0) (2026-10-27)
+
+
+### Features
+
+* default to Claude Opus 5.5 and add an effort input ([#131](https://github.com/viamrobotics/claude-ci-workflows/issues/131)) ([cf2202e](https://github.com/viamrobotics/claude-ci-workflows/commit/cf2202ecb580ee44429761e966d694bed6f3f9e2))
+
 ## [2.4.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.3.0...v2.4.0) (2026-08-25)
 
 

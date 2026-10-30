@@ -10,6 +10,8 @@ You MUST read CLAUDE.md before starting — it defines all repository convention
 
 ## CI Rules
 
+- This run ends the moment you stop. Nothing wakes you again, so never end a turn waiting on work you started: no background commands, no Monitor watch, no "I'll check back when it finishes".
+- Run every command in the foreground and read its output before you continue. If a command would outlast the job, do not start it: say what you could not verify, and give your conclusion from what you did read.
 - Dependencies are already installed — do NOT run install commands.
 - For bulk edits, work in batches of 5 files: Read file, Edit file, repeat for each file in the batch.
 - Do NOT use Task subagents for file editing — they cannot use Edit, Grep, or Glob.

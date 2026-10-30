@@ -244,6 +244,10 @@ runs:
           echo "- Only update lockfiles — the manifest file should only change if a DIRECT dependency version is being bumped."
           echo "- If no version of the parent dependency pulls in the patched transitive version, as a LAST RESORT add the transitive dependency directly to the manifest with a comment explaining WHY."
           echo ""
+          echo "## CI Run Boundary"
+          echo "- This run ends the moment you stop. Nothing wakes you again, so never end a turn waiting on work you started: no background commands, no Monitor watch."
+          echo "- Run every command in the foreground. If a command would outlast the job, do not start it: say what you could not verify, and finish with what you have."
+          echo ""
           echo "## Workflow Boundary (REBASE MODE)"
           echo "- The branch has already been reset to the default branch HEAD. The deterministic patch-replay failed (manifest conflict), so you are figuring out the fix from the advisory data."
           echo "- You modify files ONLY. Do NOT run git, do NOT commit, do NOT push, do NOT open or close PRs."
@@ -258,6 +262,20 @@ runs:
           echo "__CI_PROMPT_EOF__"
         } >> "$GITHUB_ENV"
 
+    - name: Checkout CI scripts
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        repository: viamrobotics/claude-ci-workflows
+        ref: main
+        path: .ci-prompts
+        sparse-checkout: |
+          scripts/
+        sparse-checkout-cone-mode: false
+
+    - name: Assemble CI settings
+      shell: bash
+      run: .ci-prompts/scripts/assemble-ci-settings.sh
+
     - name: Run Claude (manifest conflict fallback)
       id: claude
       if: steps.rebase-attempt.outputs.result == 'needs-claude'
@@ -268,7 +286,7 @@ runs:
         anthropic_api_key: ${{ inputs.anthropic_api_key }}
         show_full_output: ${{ inputs.show_full_output }}
         display_report: true
-        settings: .claude/settings.ci.json
+        settings: ${{ env.CLAUDE_CI_SETTINGS }}
         prompt: |
           You are rebasing the fix for `${{ inputs.package }}` against the latest default branch.
           The deterministic manifest-patch replay failed (the manifest moved on the default branch), so you must re-derive the fix from the advisory data.

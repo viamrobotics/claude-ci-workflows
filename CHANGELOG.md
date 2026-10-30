@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.5.0...v2.5.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* stop CI runs from ending on unfinished background work ([#133](https://github.com/viamrobotics/claude-ci-workflows/issues/133)) ([4964526](https://github.com/viamrobotics/claude-ci-workflows/commit/49645263d41deba2f6bedb4527ccaee97abf7b47))
+
 ## [2.5.0](https://github.com/viamrobotics/claude-ci-workflows/compare/v2.4.0...v2.5.0) (2026-10-27)
 
 
